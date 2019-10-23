@@ -346,12 +346,14 @@ package object json {
       (JsPath \ "BoardPreset").readNullable[String](minLength[String](4)) ~
       (JsPath \ "BoardPartRepository").readNullable[String](minLength[String](4)) ~
       (JsPath \ "TargetUtilization").read[Int](min(5) keepAnd max(100)) ~
-      (JsPath \ "SupportedFrequencies").readNullable[Seq[Int]](minLength[Seq[Int]](1)).map(_ getOrElse (50 to 450 by 5)) ~
+      (JsPath \ "SupportedFrequencies").readNullable[Seq[Int]](minLength[Seq[Int]](1)) ~
+      (JsPath \ "MaximumFrequency").readNullable[Int].map(_.getOrElse(450)) ~
       (JsPath \ "SlotCount").readNullable[Int](min(1) keepAnd max(255)) ~
       (JsPath \ "Description").readNullable[String](minLength[String](1)) ~
       (JsPath \ "Benchmark").readNullable[Path] ~
       (JsPath \ "HostFrequency").readNullable[Double] ~
-      (JsPath \ "MemFrequency").readNullable[Double]
+      (JsPath \ "MemFrequency").readNullable[Double] ~
+      (JsPath \ "ImplementationTimeout").readNullable[Int]
     ) (Platform.apply _)
 
   // scalastyle:on magic.number
@@ -364,12 +366,14 @@ package object json {
       (JsPath \ "BoardPreset").writeNullable[String] ~
       (JsPath \ "BoardPartRepository").writeNullable[String] ~
       (JsPath \ "TargetUtilization").write[Int] ~
-      (JsPath \ "SupportedFrequencies").write[Seq[Int]] ~
+      (JsPath \ "SupportedFrequencies").writeNullable[Seq[Int]] ~
+      (JsPath \ "MaximumFrequency").write[Int] ~
       (JsPath \ "SlotCount").writeNullable[Int] ~
       (JsPath \ "Description").writeNullable[String] ~
       (JsPath \ "Benchmark").writeNullable[Path] ~
       (JsPath \ "HostFrequency").writeNullable[Double] ~
-      (JsPath \ "MemFrequency").writeNullable[Double]
+      (JsPath \ "MemFrequency").writeNullable[Double] ~
+      (JsPath \ "ImplementationTimeout").writeNullable[Int]
     ) (unlift(Platform.unapply _))
 
   /* Platform @} */
