@@ -69,6 +69,8 @@ namespace eval arch {
         }
       }
     }
+
+    set ret [tapasco::call_plugins "additional-address-map" $ret]
     return $ret
   }
 }
