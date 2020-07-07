@@ -41,6 +41,6 @@ namespace eval jtag_over_axi {
         connect_bd_intf_net [get_bd_intf_pins system_ila_0/SLOT_0_JTAG] -boundary_type upper [get_bd_intf_pins $module_name/jtag]
         connect_bd_net [get_bd_pins system_ila_0/clk] [get_bd_pins design_clk]
     }
-
+}
 
 tapasco::register_plugin "arch::jtag_over_axi::connect_jtag" "post-pe-create"
