@@ -41,8 +41,9 @@ namespace eval platform {
     set ss_mem     [tapasco::subsystem::create "memory"]
     set ss_intc    [tapasco::subsystem::create "intc"]
     set ss_tapasco [tapasco::subsystem::create "tapasco"]
+    set ss_debug   [tapasco::subsystem::create "debug"]
 
-    set sss [list $ss_cnrs $ss_host $ss_intc $ss_mem $ss_tapasco]
+    set sss [list $ss_cnrs $ss_host $ss_intc $ss_mem $ss_tapasco $ss_debug]
 
     foreach ss $sss {
       set name [string trim $ss "/"]
@@ -96,6 +97,39 @@ namespace eval platform {
       connect_bd_net [get_bd_pins -of_objects [get_bd_cells] -filter "NAME == ${s}_peripheral_reset && DIR == O"] \
         [get_bd_pins -of_objects [get_bd_cells] -filter "NAME =~ ${s}_peripheral_resetn && DIR == O"] \
     }
+  }
+
+  proc create_subsystem_debug {} {
+    puts "  creating debug subsystem"
+
+    set module_name "axi_to_jtag_0"
+
+    # Create AXI slave port
+    set axi_port [create_bd_intf_pin -vlnv \
+        [tapasco::ip::get_vlnv "aximm_intf"] -mode Slave "S_DEBUG"]
+    # Create JTAG and JTAG reset ports
+    set jtag_out [create_bd_intf_pin -mode Master \
+        -vlnv xilinx.com:interface:jtag_rtl:2.0 "M_JTAG"]
+    set jtag_rst [create_bd_pin -dir O "JTAG_RST"]
+
+    # Create the AXI to JTAG converter module
+    set axi_to_jtag_converter [tapasco::ip::create_axi_to_jtag $module_name]
+    set convert_interface [get_bd_intf_pins -of_objects $axi_to_jtag_converter \
+        -filter "VLNV == xilinx.com:interface:jtag_rtl:2.0"]
+
+    # Connect JTAG and JTAG Reset
+    connect_bd_intf_net $convert_interface $jtag_out
+    connect_bd_net $jtag_rst [get_bd_pins $axi_to_jtag_converter/jtag_TRST]
+
+    # Connect AXI to converter module
+    connect_bd_intf_net $axi_port [get_bd_intf_pins -of_objects $axi_to_jtag_converter \
+        -filter "VLNV == [tapasco::ip::get_vlnv "aximm_intf"] && MODE == Slave"]
+
+    # Connect clk and reset to converter module
+    connect_bd_net [tapasco::subsystem::get_port "host" "clk"] \
+        [get_bd_pins -of_objects $axi_to_jtag_converter -filter {TYPE == clk && DIR == I}]
+    connect_bd_net [tapasco::subsystem::get_port "host" "rst" "peripheral" "resetn"] \
+        [get_bd_pins -of_objects $axi_to_jtag_converter -filter {TYPE == rst && DIR == I}]
   }
 
   proc create_subsystem_tapasco {} {

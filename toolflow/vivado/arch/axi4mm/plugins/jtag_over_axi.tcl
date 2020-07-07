@@ -1,37 +1,31 @@
 namespace eval jtag_over_axi {
-    variable module_name "axi_to_jtag_0"
 
-    proc connect_jtag_over_axi {inst {args {}}} {
-        variable module_name
-
+    proc connect_jtag {inst {args {}}} {
         set inst [get_bd_cells $inst]
         set name [get_property NAME $inst]
         set ninst [get_bd_cells $inst/internal_$name]
 
-        # Create AXI to JTAG converter
-        set axi_to_jtag_converter [tapasco::ip::create_axi_to_jtag $module_name]
-        set convert_interface [get_bd_intf_pins -of_objects $axi_to_jtag_converter \
-            -filter "VLNV == xilinx.com:interface:jtag_rtl:2.0"]
-
-        # Connect JTAG modules reset pin
-        connect_bd_net [get_bd_pins /arch/design_peripheral_aresetn] \
-            [get_bd_pins $axi_to_jtag_converter/ARESETN]
+        # Add AXI to JTAG conversion module
+        set jtag_in [create_bd_intf_pin -mode Slave -vlnv xilinx.com:interface:jtag_rtl:2.0 S_JTAG]
+        set jtag_in_rst [create_bd_pin -dir I JTAG_RST]
 
         foreach jtag_pin [get_bd_intf_pins -of_objects $ninst \
                 -filter "VLNV == xilinx.com:interface:jtag_rtl:2.0"] {
             puts "JTAG pin found = $jtag_pin"
 
+            # TODO JTAG splitter for the case that more that one JTAG slave is present
+
             # Connect JTAG module to JTAG port
-            connect_bd_intf_net $convert_interface $jtag_pin
-
-            # Connect the jtag reset pin of the core
-            connect_bd_net [get_bd_pins $axi_to_jtag_converter/jtag_TRST] [get_bd_pins $ninst/JTAG_RST]
-
-            puts "Successfully added AXI to JTAG module"
-
-            # append the new module to list of axi slaves
-            set inst [list $inst $axi_to_jtag_converter]
+            connect_bd_intf_net $jtag_in $jtag_pin
         }
+        foreach jtag_rst [get_bd_pins -of_objects $ninst \
+                -filter "NAME == JTAG_RST"] {
+            puts "JTAG reset pin found = $jtag_rst"
+
+            # Connect JTAG reset
+            connect_bd_net $jtag_in_rst $jtag_rst
+        }
+
         return [list $inst $args]
     }
 
@@ -48,26 +42,5 @@ namespace eval jtag_over_axi {
         connect_bd_net [get_bd_pins system_ila_0/clk] [get_bd_pins design_clk]
     }
 
-    # Add the AXI to JTAG module to the address map
-    proc add_address_map {map offset} {
-        variable module_name
 
-        set intf [get_bd_intf_pins -of_object [get_bd_cells /arch/$module_name] \
-            -filter {VLNV == xilinx.com:interface:aximm_rtl:1.0}]
-
-        set offset 0x43C00000
-        set range [get_property range [get_bd_addr_segs /arch/$module_name/s_AXI_JTAG/reg0]]
-
-        puts "Adding JTAG Module at address $offset with range $range"
-
-        dict set map $intf "interface $intf \
-            [format "offset 0x%08x range 0x%08x" $offset $range] kind invisible"
-
-        incr offset $range
-
-        return $map
-    }
-}
-
-tapasco::register_plugin "arch::jtag_over_axi::connect_jtag_over_axi" "post-pe-create"
-tapasco::register_plugin "arch::jtag_over_axi::add_address_map" "additional-address-map"
+tapasco::register_plugin "arch::jtag_over_axi::connect_jtag" "post-pe-create"
