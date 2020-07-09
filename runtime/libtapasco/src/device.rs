@@ -38,7 +38,6 @@ use std::fs::OpenOptions;
 use std::os::unix::io::AsRawFd;
 use std::sync::Arc;
 use std::sync::Mutex;
-use libc::c_int;
 
 pub mod status {
     include!(concat!(env!("OUT_DIR"), "/tapasco.status.rs"));
@@ -402,7 +401,7 @@ impl Device {
         Ok(freq as f32)
     }
 
-    pub fn debug_offset(&self) -> Result<c_int> {
+    pub fn debug_offset(&self) -> Result<i32> {
         let freq = self
             .status
             .platform
@@ -414,7 +413,7 @@ impl Device {
                 size: 0,
             })
             .offset;
-        Ok(freq as c_int)
+        Ok(freq as i32)
     }
 
     pub fn default_memory(&self) -> Result<Arc<OffchipMemory>> {

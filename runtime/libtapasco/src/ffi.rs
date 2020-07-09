@@ -778,7 +778,7 @@ pub extern "C" fn tapasco_device_design_frequency(dev: *mut Device) -> f32 {
 }
 
 #[no_mangle]
-pub extern "C" fn tapasco_device_debug_offset(dev: *mut Device) -> c_int {
+pub extern "C" fn tapasco_device_debug_offset(dev: *mut Device) -> i32 {
     if dev.is_null() {
         warn!("Null pointer passed into tapasco_device_debug_offset() as the device");
         update_last_error(Error::NullPointerTLKM {});
