@@ -325,6 +325,10 @@ public:
     return tapasco_device_design_frequency(this->device);
   }
 
+  float debug_offset() {
+    return tapasco_device_debug_offset(this->device);
+  }
+
   Device *get_device() { return this->device; }
 
 private:
@@ -524,6 +528,8 @@ struct Tapasco {
   }
 
   float design_frequency() { return this->device_internal.design_frequency(); }
+
+  int debug_offset() { return this->device_internal.debug_offset(); }
 
   std::string version() {
     uintptr_t len = tapasco_version_len();

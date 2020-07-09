@@ -38,6 +38,7 @@ use std::fs::OpenOptions;
 use std::os::unix::io::AsRawFd;
 use std::sync::Arc;
 use std::sync::Mutex;
+use libc::c_int;
 
 pub mod status {
     include!(concat!(env!("OUT_DIR"), "/tapasco.status.rs"));
@@ -399,6 +400,21 @@ impl Device {
             })
             .frequency_mhz;
         Ok(freq as f32)
+    }
+
+    pub fn debug_offset(&self) -> Result<c_int> {
+        let freq = self
+            .status
+            .platform
+            .iter()
+            .find(|&x| x.name == "PLATFORM_COMPONENT_DEBUG")
+            .unwrap_or(&status::Platform {
+                name: "".to_string(),
+                offset: 0,
+                size: 0,
+            })
+            .offset;
+        Ok(freq as c_int)
     }
 
     pub fn default_memory(&self) -> Result<Arc<OffchipMemory>> {
