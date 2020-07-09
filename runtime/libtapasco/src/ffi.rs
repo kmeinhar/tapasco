@@ -760,6 +760,24 @@ pub extern "C" fn tapasco_device_design_frequency(dev: *mut Device) -> f32 {
     }
 }
 
+#[no_mangle]
+pub extern "C" fn tapasco_device_debug_offset(dev: *mut Device) -> c_int {
+    if dev.is_null() {
+        warn!("Null pointer passed into tapasco_device_debug_offset() as the device");
+        update_last_error(Error::NullPointerTLKM {});
+        return -1;
+    }
+
+    let tl = unsafe { &mut *dev };
+    match tl.debug_offset().context(DeviceError) {
+        Ok(x) => x,
+        Err(e) => {
+            update_last_error(e);
+            -1
+        }
+    }
+}
+
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 #[no_mangle]
