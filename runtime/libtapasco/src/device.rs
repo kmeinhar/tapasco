@@ -18,6 +18,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use byteorder::{ByteOrder, LittleEndian};
 use crate::allocator::{Allocator, DriverAllocator, GenericAllocator};
 use crate::dma::{DMAControl, DirectDMA, DriverDMA};
 use crate::job::Job;
@@ -158,6 +159,7 @@ pub struct Device {
     access: tlkm_access,
     scheduler: Arc<Scheduler>,
     platform: MmapMut,
+    debug: MmapMut,
     arch: Arc<MmapMut>,
     offchip_memory: Vec<Arc<OffchipMemory>>,
     tlkm_file: Arc<File>,
@@ -293,6 +295,24 @@ impl Device {
                 .context(SchedulerError)?,
         );
 
+        trace!("Mapping RV debug area.");
+        let tlkm_debug_file = Arc::new(
+            OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(format!("/dev/tlkm_debug_{:02}", id))
+                .context(DeviceUnavailable { id: id })?,
+        );
+
+        let debug = unsafe {
+            MmapOptions::new()
+                .len(20)
+                .offset(0)
+                .map_mut(&tlkm_debug_file)
+                .context(DeviceUnavailable { id: id })?
+        };
+        trace!("Mapped RV debug area: {}", debug[0]);
+
         let mut device = Device {
             id: id,
             vendor: vendor,
@@ -302,6 +322,7 @@ impl Device {
             status: s,
             scheduler: scheduler,
             platform: platform,
+            debug: debug,
             arch: arch,
             offchip_memory: allocator,
             tlkm_file: tlkm_file,
@@ -414,6 +435,12 @@ impl Device {
             })
             .offset;
         Ok(freq as i32)
+    }
+
+    pub fn debug_idcode(&self) -> Result<i32> {
+        let mut dst = [0; 1];
+        LittleEndian::read_i32_into(&self.debug[4..8], &mut dst);
+        Ok(dst[0] as i32)
     }
 
     pub fn default_memory(&self) -> Result<Arc<OffchipMemory>> {
