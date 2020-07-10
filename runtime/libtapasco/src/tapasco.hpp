@@ -329,8 +329,20 @@ public:
     return tapasco_device_debug_offset(this->device);
   }
 
-  int debug_idcode() {
-    return tapasco_device_debug_idcode(this->device);
+  int debug_read_dtm(uint32_t reg_addr) {
+    return tapasco_device_debug_read_dtm_reg(this->device, reg_addr);
+  }
+
+  void debug_write_dtm(uint32_t reg_addr, uint32_t data) {
+    return tapasco_device_debug_write_dtm_reg(this->device, reg_addr, data);
+  }
+
+  int debug_read_dm_reg(uint32_t reg_addr) {
+    return tapasco_device_debug_read_dm_reg(this->device, reg_addr);
+  }
+
+  void debug_write_dm_reg(uint32_t reg_addr, uint32_t data) {
+    tapasco_device_debug_write_dm_reg(this->device, reg_addr, data);
   }
 
   Device *get_device() { return this->device; }
@@ -535,7 +547,19 @@ struct Tapasco {
 
   int debug_offset() { return this->device_internal.debug_offset(); }
 
-  int debug_IDCODE() { return this->device_internal.debug_idcode(); }
+  int debug_read_dtm(uint32_t reg_addr) { return this->device_internal.debug_read_dtm(reg_addr); }
+
+  void debug_write_dtm(uint32_t reg_addr, uint32_t data) {
+      return this->device_internal.debug_write_dtm(reg_addr, data);
+  }
+
+  uint32_t debug_read_dm_reg(uint32_t reg_addr) {
+      return this->device_internal.debug_read_dm_reg(reg_addr);
+  }
+
+  void debug_write_dm_reg(uint32_t reg_addr, uint32_t data) {
+      this->device_internal.debug_write_dm_reg(reg_addr, data);
+  }
 
   std::string version() {
     uintptr_t len = tapasco_version_len();

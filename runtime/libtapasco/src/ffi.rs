@@ -796,19 +796,73 @@ pub extern "C" fn tapasco_device_debug_offset(dev: *mut Device) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn tapasco_device_debug_idcode(dev: *mut Device) -> i32 {
+pub extern "C" fn tapasco_device_debug_read_dtm_reg(dev: *mut Device, reg_addr: u32) -> u32 {
     if dev.is_null() {
-        warn!("Null pointer passed into tapasco_device_debug_idcode() as the device");
+        warn!("Null pointer passed into tapasco_device_debug_read_dtm_reg() as the device");
         update_last_error(Error::NullPointerTLKM {});
-        return -1;
+        return 0;
     }
 
     let tl = unsafe { &mut *dev };
-    match tl.debug_idcode().context(DeviceError) {
+    match tl.debug_read_dtm_reg(reg_addr).context(DeviceError) {
         Ok(x) => x,
         Err(e) => {
             update_last_error(e);
-            -1
+            0
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tapasco_device_debug_write_dtm_reg(dev: *mut Device, reg_addr: u32, data: u32) {
+    if dev.is_null() {
+        warn!("Null pointer passed into tapasco_device_debug_write_dtm_reg() as the device");
+        update_last_error(Error::NullPointerTLKM {});
+        return ();
+    }
+
+    let tl = unsafe { &mut *dev };
+    match tl.debug_write_dtm_reg(reg_addr, data).context(DeviceError) {
+        Ok(_) => (),
+        Err(e) => {
+            update_last_error(e);
+            ()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tapasco_device_debug_read_dm_reg(dev: *mut Device, reg_addr: u32) -> u32 {
+    if dev.is_null() {
+        warn!("Null pointer passed into tapasco_device_debug_idcode() as the device");
+        update_last_error(Error::NullPointerTLKM {});
+        return 0;
+    }
+
+    let tl = unsafe { &mut *dev };
+    match tl.debug_read_dm_reg(reg_addr).context(DeviceError) {
+        Ok(x) => x,
+        Err(e) => {
+            update_last_error(e);
+            0
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tapasco_device_debug_write_dm_reg(dev: *mut Device, reg_addr: u32, data: u32) {
+    if dev.is_null() {
+        warn!("Null pointer passed into tapasco_device_debug_idcode() as the device");
+        update_last_error(Error::NullPointerTLKM {});
+        return ();
+    }
+
+    let tl = unsafe { &mut *dev };
+    match tl.debug_write_dm_reg(reg_addr, data).context(DeviceError) {
+        Ok(_) => (),
+        Err(e) => {
+            update_last_error(e);
+            ()
         }
     }
 }
