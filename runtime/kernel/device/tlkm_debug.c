@@ -35,25 +35,29 @@
 
 static void *mapped_address;
 
-inline static dev_addr_t get_debug_offset_from_file(struct file *file)
+inline static tlkm_component_t get_debug_component (struct tlkm_device* inst)
 {
-	struct miscdevice *dev = (struct miscdevice *)file->private_data;
-	struct tlkm_device *inst =
-		container_of(dev, struct tlkm_device, debug_dev);
-    dev_addr_t debug_offset = 0;
+    tlkm_component_t empty_comp = {"", 0, 0};
     int i;
     for (i = 0; i < TLKM_COMPONENT_MAX; i += 1) {
         int cmp = strncmp("PLATFORM_COMPONENT_DEBUG", inst->components[i].name,
                 TLKM_COMPONENTS_NAME_MAX);
         if (cmp == 0)
         {
-            printk (KERN_INFO "value = %p\n", inst->dma->base);
-            debug_offset = inst->components[i].offset;
-            break;
+            return inst->components[i];
         }
     }
 
-	return debug_offset + inst->plat.base; 
+	return empty_comp;
+}
+
+inline static dev_addr_t get_debug_offset_from_file(struct file *file)
+{
+	struct miscdevice *dev = (struct miscdevice *)file->private_data;
+	struct tlkm_device *inst = container_of(dev, struct tlkm_device, debug_dev);
+    tlkm_component_t debug_comp = get_debug_component(inst);
+
+	return debug_comp.offset + inst->plat.base;
 }
 
 
@@ -86,16 +90,46 @@ static ssize_t tlkm_debug_read(struct file *file, char __user *usr,
 	return 0;
 }
 
+int tlkm_debug_mmap(struct file *fp, struct vm_area_struct *vm)
+{
+    struct miscdevice *dev = (struct miscdevice *)fp->private_data;
+    struct tlkm_device *dp = container_of(dev, struct tlkm_device, debug_dev);
+    tlkm_component_t debug_comp = get_debug_component(dp);
+    ssize_t const sz = vm->vm_end - vm->vm_start;
+    ulong const off = vm->vm_pgoff << PAGE_SHIFT;
+    ulong kptr = addr2map_off(dp, off);
+    DEVLOG(dp->dev_id, TLKM_LF_DEBUG, "received mmap: offset = 0x%08lx", off);
+    if (kptr == -1) {
+        DEVERR(dp->dev_id, "invalid address: 0x%08lx", off);
+        return -ENXIO;
+    }
+
+    DEVLOG(dp->dev_id, TLKM_LF_DEBUG,
+           "mapping %zu bytes from physical address 0x%lx to user space 0x%lx-0x%lx",
+           sz, dp->base_offset + kptr + debug_comp.offset, vm->vm_start, vm->vm_end);
+    vm->vm_page_prot = pgprot_noncached(vm->vm_page_prot);
+    if (io_remap_pfn_range(vm, vm->vm_start,
+            (dp->base_offset + kptr + debug_comp.offset) >> PAGE_SHIFT, sz,
+            vm->vm_page_prot)) {
+        DEVWRN(dp->dev_id, "io_remap_pfn_range failed!");
+        return -EAGAIN;
+    }
+
+    DEVLOG(dp->dev_id, TLKM_LF_DEBUG, "register space mapping successful");
+    return 0;
+}
+
 static const struct file_operations tlkm_debug_fops = {
-	.owner = THIS_MODULE,
-	.read = tlkm_debug_read,
+    .owner = THIS_MODULE,
+    .read = tlkm_debug_read,
+    .mmap = tlkm_debug_mmap,
 };
 
 int tlkm_debug_init(struct tlkm_device *dev)
 {
     dev_addr_t debug_offset = 0;
     u64 debug_size = 0;
-    int i;
+    tlkm_component_t debug_comp;
 
 	int ret = 0;
 	char fn[256];
@@ -110,17 +144,10 @@ int tlkm_debug_init(struct tlkm_device *dev)
 		return ret;
 	}
 
-    for (i = 0; i < TLKM_COMPONENT_MAX; i += 1) {
-        int cmp = strncmp("PLATFORM_COMPONENT_DEBUG", dev->components[i].name,
-                TLKM_COMPONENTS_NAME_MAX);
-        if (cmp == 0)
-        {
-            printk (KERN_INFO "value = %p\n", dev->dma->base);
-            debug_offset = dev->components[i].offset + dev->plat.base;
-            debug_size = dev->components[i].size;
-            break;
-        }
-    }
+    debug_comp = get_debug_component(dev);
+
+    debug_offset = debug_comp.offset + dev->plat.base;
+    debug_size = debug_comp.size;
 
 	if (debug_offset == 0 || debug_size == 0) {
 		DEVERR(dev->dev_id, "could not find debug module %s: %d", fn, ret);
@@ -130,7 +157,6 @@ int tlkm_debug_init(struct tlkm_device *dev)
     // Map den Debug module
     mapped_address = ioremap(debug_offset, debug_size);
 
-    printk (KERN_INFO "value = %p\n", mapped_address);
 	DEVLOG(dev->dev_id, TLKM_LF_DEBUG, "%s is set up", fn);
 	return 0;
 }
