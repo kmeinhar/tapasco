@@ -442,7 +442,7 @@
         <spirit:parameters>
           <spirit:parameter>
             <spirit:name>viewChecksum</spirit:name>
-            <spirit:value>d2de0dcf</spirit:value>
+            <spirit:value>7a6f324c</spirit:value>
           </spirit:parameter>
         </spirit:parameters>
       </spirit:view>
@@ -458,7 +458,7 @@
         <spirit:parameters>
           <spirit:parameter>
             <spirit:name>viewChecksum</spirit:name>
-            <spirit:value>d2de0dcf</spirit:value>
+            <spirit:value>7a6f324c</spirit:value>
           </spirit:parameter>
         </spirit:parameters>
       </spirit:view>
@@ -1254,6 +1254,36 @@
           </spirit:wireTypeDefs>
         </spirit:wire>
       </spirit:port>
+      <spirit:port>
+        <spirit:name>slave_select</spirit:name>
+        <spirit:wire>
+          <spirit:direction>out</spirit:direction>
+          <spirit:vector>
+            <spirit:left spirit:format="long">1</spirit:left>
+            <spirit:right spirit:format="long">0</spirit:right>
+          </spirit:vector>
+          <spirit:wireTypeDefs>
+            <spirit:wireTypeDef>
+              <spirit:typeName>wire</spirit:typeName>
+              <spirit:viewNameRef>xilinx_anylanguagesynthesis</spirit:viewNameRef>
+              <spirit:viewNameRef>xilinx_anylanguagebehavioralsimulation</spirit:viewNameRef>
+            </spirit:wireTypeDef>
+          </spirit:wireTypeDefs>
+        </spirit:wire>
+      </spirit:port>
+      <spirit:port>
+        <spirit:name>RDY_slave_select</spirit:name>
+        <spirit:wire>
+          <spirit:direction>out</spirit:direction>
+          <spirit:wireTypeDefs>
+            <spirit:wireTypeDef>
+              <spirit:typeName>wire</spirit:typeName>
+              <spirit:viewNameRef>xilinx_anylanguagesynthesis</spirit:viewNameRef>
+              <spirit:viewNameRef>xilinx_anylanguagebehavioralsimulation</spirit:viewNameRef>
+            </spirit:wireTypeDef>
+          </spirit:wireTypeDefs>
+        </spirit:wire>
+      </spirit:port>
     </spirit:ports>
   </spirit:model>
   <spirit:choices>
@@ -1273,7 +1303,7 @@
       <spirit:file>
         <spirit:name>src/mkAXI_to_JTAG.v</spirit:name>
         <spirit:fileType>verilogSource</spirit:fileType>
-        <spirit:userFileType>CHECKSUM_ea6539b6</spirit:userFileType>
+        <spirit:userFileType>CHECKSUM_e6beebda</spirit:userFileType>
       </spirit:file>
     </spirit:fileSet>
     <spirit:fileSet>
@@ -1334,7 +1364,7 @@
       <xilinx:displayName>AXI_to_JTAG</xilinx:displayName>
       <xilinx:definitionSource>package_project</xilinx:definitionSource>
       <xilinx:coreRevision>1</xilinx:coreRevision>
-      <xilinx:coreCreationDateTime>2020-07-07T12:35:10Z</xilinx:coreCreationDateTime>
+      <xilinx:coreCreationDateTime>2020-07-14T13:56:28Z</xilinx:coreCreationDateTime>
       <xilinx:tags>
         <xilinx:tag xilinx:name="nopcore"/>
       </xilinx:tags>
@@ -1343,8 +1373,8 @@
       <xilinx:xilinxVersion>2019.1</xilinx:xilinxVersion>
       <xilinx:checksum xilinx:scope="busInterfaces" xilinx:value="cb9d5182"/>
       <xilinx:checksum xilinx:scope="memoryMaps" xilinx:value="764ceac7"/>
-      <xilinx:checksum xilinx:scope="fileGroups" xilinx:value="9b2ecaf9"/>
-      <xilinx:checksum xilinx:scope="ports" xilinx:value="738eb12b"/>
+      <xilinx:checksum xilinx:scope="fileGroups" xilinx:value="7d4f83f0"/>
+      <xilinx:checksum xilinx:scope="ports" xilinx:value="d7676135"/>
       <xilinx:checksum xilinx:scope="parameters" xilinx:value="e0a85eaf"/>
     </xilinx:packagingInfo>
   </spirit:vendorExtensions>
