@@ -5,27 +5,23 @@ namespace eval jtag_over_axi {
         set name [get_property NAME $inst]
         set ninst [get_bd_cells $inst/internal_$name]
 
-        # Add AXI to JTAG conversion module
-        set jtag_in [create_bd_intf_pin -mode Slave -vlnv xilinx.com:interface:jtag_rtl:2.0 S_JTAG]
-        set jtag_in_rst [create_bd_pin -dir I JTAG_RST]
+        # Get the number of the target IP
+        set kind [format "%d" [regsub {.*target_ip_.*([0-9][0-9][0-9])} $name {\1}]]
+
+        # Set the JTAG ID that can be read as IDCODE
+        set_property -dict [list CONFIG.jtag_id [format "0x%0d" $kind]] $ninst
 
         foreach jtag_pin [get_bd_intf_pins -of_objects $ninst \
                 -filter "VLNV == xilinx.com:interface:jtag_rtl:2.0"] {
-            puts "JTAG pin found = $jtag_pin"
+            puts "JTAG pin found = $jtag_pin for IP $ninst"
 
-            # TODO JTAG splitter for the case that more that one JTAG slave is present
+            # Create JTAG interface ports for every IP with JTAG port
+            set jtag_in [create_bd_intf_pin -mode Slave \
+                -vlnv xilinx.com:interface:jtag_rtl:2.0 [format "S_JTAG_%02d" $kind]]
 
             # Connect JTAG module to JTAG port
             connect_bd_intf_net $jtag_in $jtag_pin
         }
-        foreach jtag_rst [get_bd_pins -of_objects $ninst \
-                -filter "NAME == JTAG_RST"] {
-            puts "JTAG reset pin found = $jtag_rst"
-
-            # Connect JTAG reset
-            connect_bd_net $jtag_in_rst $jtag_rst
-        }
-
         return [list $inst $args]
     }
 

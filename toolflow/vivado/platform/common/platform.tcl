@@ -102,28 +102,67 @@ namespace eval platform {
   proc create_subsystem_debug {} {
     puts "  creating debug subsystem"
 
-    set module_name "axi_to_jtag_0"
+    # Search for all JTAG slave interfaces
+    set jtag_slave_intf {}
+    set i 0
+    foreach p [get_bd_intf_pins -quiet -of_objects [get_bd_cells /arch] \
+        -filter "MODE == Slave && VLNV == xilinx.com:interface:jtag_rtl:2.0"] {
+
+        # Create JTAG and JTAG reset ports
+        lappend jtag_slave_intf [create_bd_intf_pin -mode Master \
+            -vlnv xilinx.com:interface:jtag_rtl:2.0 [format "M_JTAG_%02d" $i]]
+        incr i
+    }
+
+    puts "  found [llength $jtag_slave_intf] jtag interfaces"
+
+    # Create AXI to JTAG converter
+    set axi_to_jtag_converter [tapasco::ip::create_axi_to_jtag "axi_to_jtag"]
+    # Get Converter Module interface
+    set convert_interface [get_bd_intf_pins -of_objects $axi_to_jtag_converter \
+        -filter "VLNV == xilinx.com:interface:jtag_rtl:2.0"]
 
     # Create AXI slave port
     set axi_port [create_bd_intf_pin -vlnv \
         [tapasco::ip::get_vlnv "aximm_intf"] -mode Slave "S_DEBUG"]
-    # Create JTAG and JTAG reset ports
-    set jtag_out [create_bd_intf_pin -mode Master \
-        -vlnv xilinx.com:interface:jtag_rtl:2.0 "M_JTAG"]
-    set jtag_rst [create_bd_pin -dir O "JTAG_RST"]
-
-    # Create the AXI to JTAG converter module
-    set axi_to_jtag_converter [tapasco::ip::create_axi_to_jtag $module_name]
-    set convert_interface [get_bd_intf_pins -of_objects $axi_to_jtag_converter \
-        -filter "VLNV == xilinx.com:interface:jtag_rtl:2.0"]
-
-    # Connect JTAG and JTAG Reset
-    connect_bd_intf_net $convert_interface $jtag_out
-    connect_bd_net $jtag_rst [get_bd_pins $axi_to_jtag_converter/jtag_TRST]
 
     # Connect AXI to converter module
     connect_bd_intf_net $axi_port [get_bd_intf_pins -of_objects $axi_to_jtag_converter \
         -filter "VLNV == [tapasco::ip::get_vlnv "aximm_intf"] && MODE == Slave"]
+
+    if {[llength $jtag_slave_intf] > 4} {
+        error "Currently only 4 JTAG interfaces supported!"
+    } elseif {[llength $jtag_slave_intf] > 1} {
+        # Create jtag switch to split one jtag interface into multiple
+        set jtag_switch [tapasco::ip::create_jtag_switch "jtag_switch"]
+
+        # Get JTAG switch slave interface
+        set switch_slave [get_bd_intf_pins -of_objects $jtag_switch \
+            -filter "VLNV == xilinx.com:interface:jtag_rtl:2.0 && MODE == Slave"]
+
+        connect_bd_intf_net $convert_interface $switch_slave
+
+        # Set the number of output ports to the number of slaves
+        set_property CONFIG.jtag_master [llength $jtag_slave_intf]  $jtag_switch
+
+        # Connect all JTAG slaves
+        set counter 0
+        foreach jtag_master [get_bd_intf_pins -of_objects $jtag_switch \
+            -filter "VLNV == xilinx.com:interface:jtag_rtl:2.0 && MODE == Master"] {
+            connect_bd_intf_net $jtag_master [lindex $jtag_slave_intf $counter]
+            incr counter
+        }
+
+        # Connect slave select
+        set converter_ss [get_bd_pins -of_objects $axi_to_jtag_converter \
+            -filter "NAME == slave_select"]
+        set switch_ss [get_bd_pins -of_objects $jtag_switch \
+            -filter "NAME == slave_select"]
+        connect_bd_net $converter_ss $switch_ss
+    } else {
+        # Only one jtag slave present
+        connect_bd_intf_net $convert_interface [lindex $jtag_slave_intf 0]
+    }
 
     # Connect clk and reset to converter module
     connect_bd_net [tapasco::subsystem::get_port "host" "clk"] \

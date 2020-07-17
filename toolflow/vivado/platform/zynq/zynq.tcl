@@ -53,7 +53,7 @@ namespace eval ::platform {
       switch -glob [get_property NAME $m] {
         "M_TAPASCO" { foreach {base stride range comp} [list 0x80000000 0       0 "PLATFORM_COMPONENT_STATUS"] {} }
         "M_INTC"    { foreach {base stride range comp} [list 0x80010000 0x10000 0 "PLATFORM_COMPONENT_INTC0"] {} }
-        "M_DEBUG"    { foreach {base stride range comp} [list 0x80020000 0x10000 0 "PLATFORM_COMPONENT_DEBUG"] {} }
+        "M_DEBUG"    { foreach {base stride range comp} [list 0x83C00000 0      0 "PLATFORM_COMPONENT_DEBUG"] {} }
         "M_ARCH"    { set base "skip" }
         default     { foreach {base stride range comp} [list 0 0 0 ""] {} }
       }

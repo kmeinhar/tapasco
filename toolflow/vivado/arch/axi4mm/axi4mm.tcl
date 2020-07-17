@@ -197,7 +197,6 @@ namespace eval arch {
       set no_inst [dict get $composition $i count]
       set example [get_bd_cells [format "target_ip_%02d_000" $i]]
       set slaves  [get_bd_intf_pins -of $example -filter { MODE == "Slave" && VLNV == "xilinx.com:interface:aximm_rtl:1.0" }]
-      # TODO the +1 only works when jtag pe present
       set ic_s [expr "$ic_s + [llength $slaves] * $no_inst"]
     }
 
