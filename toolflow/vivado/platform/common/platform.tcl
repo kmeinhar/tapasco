@@ -159,6 +159,12 @@ namespace eval platform {
         set switch_ss [get_bd_pins -of_objects $jtag_switch \
             -filter "NAME == slave_select"]
         connect_bd_net $converter_ss $switch_ss
+
+        # Connect clk and reset to converter module
+        connect_bd_net [tapasco::subsystem::get_port "host" "clk"] \
+            [get_bd_pins -of_objects $jtag_switch -filter {TYPE == clk && DIR == I}]
+        connect_bd_net [tapasco::subsystem::get_port "host" "rst" "peripheral" "resetn"] \
+            [get_bd_pins -of_objects $jtag_switch -filter {TYPE == rst && DIR == I}]
     } else {
         # Only one jtag slave present
         connect_bd_intf_net $convert_interface [lindex $jtag_slave_intf 0]
