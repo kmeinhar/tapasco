@@ -130,7 +130,7 @@ namespace eval platform {
     connect_bd_intf_net $axi_port [get_bd_intf_pins -of_objects $axi_to_jtag_converter \
         -filter "VLNV == [tapasco::ip::get_vlnv "aximm_intf"] && MODE == Slave"]
 
-    if {[llength $jtag_slave_intf] > 4} {
+    if {[llength $jtag_slave_intf] > 16} {
         error "Currently only 4 JTAG interfaces supported!"
     } elseif {[llength $jtag_slave_intf] > 1} {
         # Create jtag switch to split one jtag interface into multiple
@@ -146,11 +146,10 @@ namespace eval platform {
         set_property CONFIG.jtag_master [llength $jtag_slave_intf]  $jtag_switch
 
         # Connect all JTAG slaves
-        set counter 0
         foreach jtag_master [get_bd_intf_pins -of_objects $jtag_switch \
             -filter "VLNV == xilinx.com:interface:jtag_rtl:2.0 && MODE == Master"] {
-            connect_bd_intf_net $jtag_master [lindex $jtag_slave_intf $counter]
-            incr counter
+            set kind [scan [regsub {.*([0-9][0-9])} $jtag_master {\1}] %d]
+            connect_bd_intf_net $jtag_master [lindex $jtag_slave_intf $kind]
         }
 
         # Connect slave select

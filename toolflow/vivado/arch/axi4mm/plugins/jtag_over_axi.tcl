@@ -6,10 +6,10 @@ namespace eval jtag_over_axi {
         set ninst [get_bd_cells $inst/internal_$name]
 
         # Get the number of the target IP
-        set kind [format "%d" [regsub {.*target_ip_.*([0-9][0-9][0-9])} $name {\1}]]
+        set kind [scan [regsub {.*target_ip_.*([0-9][0-9][0-9])} $name {\1}] %d]
 
         # Set the JTAG ID that can be read as IDCODE
-        set_property -dict [list CONFIG.jtag_id [format "0x%0d" $kind]] $ninst
+        set_property -dict [list CONFIG.jtag_id [format "%d" $kind]] $ninst
 
         foreach jtag_pin [get_bd_intf_pins -of_objects $ninst \
                 -filter "VLNV == xilinx.com:interface:jtag_rtl:2.0"] {
