@@ -254,7 +254,9 @@ namespace eval ::platform {
       lappend gp1_masters [create_bd_intf_pin -mode Master -vlnv $aximm_vlnv [format "M_%s" [string toupper $ss]]]
     }
     lappend gp1_masters [create_bd_intf_pin -mode Master -vlnv $aximm_vlnv "M_TAPASCO"]
-    lappend gp1_masters [create_bd_intf_pin -mode Master -vlnv $aximm_vlnv "M_DEBUG"]
+    if {[tapasco::is_feature_enabled "JtagDebug"]} {
+        lappend gp1_masters [create_bd_intf_pin -mode Master -vlnv $aximm_vlnv "M_DEBUG"]
+    }
 
     set gp0_ic_tree [::tapasco::create_interconnect_tree "gp0_ic_tree" [llength $gp0_masters] false]
     set gp1_ic_tree [::tapasco::create_interconnect_tree "gp1_ic_tree" [llength $gp1_masters] false]
