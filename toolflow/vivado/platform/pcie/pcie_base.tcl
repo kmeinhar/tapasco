@@ -70,6 +70,7 @@
         "M_INTC"    { foreach {base stride range comp} [list 0x00020000 0x10000 0      "PLATFORM_COMPONENT_INTC0"] {} }
         "M_MSIX"    { foreach {base stride range comp} [list 0          0       $max64 "PLATFORM_COMPONENT_MSIX0"] {} }
         "M_TAPASCO" { foreach {base stride range comp} [list 0x00000000 0x10000 0      "PLATFORM_COMPONENT_STATUS"] {} }
+        "M_DEBUG"    { foreach {base stride range comp} [list 0x00040000 0x10000 0 "PLATFORM_COMPONENT_DEBUG"] {} }
         "M_HOST"    { foreach {base stride range comp} [list 0          0       $max64 ""] {} }
         "M_MEM_0"    { foreach {base stride range comp} [list 0          0       $max64 ""] {} }
         "M_ARCH"    { set base "skip" }
@@ -269,6 +270,9 @@
     set pcie_aclk [create_bd_pin -type "clk" -dir "O" "pcie_aclk"]
     set pcie_aresetn [create_bd_pin -type "rst" -dir "O" "pcie_aresetn"]
     set msix_interface [create_bd_intf_pin -mode Slave -vlnv xilinx.com:interface:pcie3_cfg_msix_rtl:1.0 "S_MSIX"]
+    if {[tapasco::is_feature_enabled "JtagDebug"]} {
+        set m_debug [create_bd_intf_pin -mode Master -vlnv xilinx.com:interface:aximm_rtl:1.0 "M_DEBUG"]
+    }
 
     # create instances of cores: PCIe core, mm_to_lite
     set pcie [create_pcie_core]
@@ -280,7 +284,11 @@
         connect_bd_intf_net $msix_interface [get_bd_intf_pins $pcie/pcie_cfg_msix]
     }
 
-    set out_ic [tapasco::ip::create_axi_sc "out_ic" 1 4]
+    if {[tapasco::is_feature_enabled "JtagDebug"]} {
+        set out_ic [tapasco::ip::create_axi_sc "out_ic" 1 5]
+    } else {
+        set out_ic [tapasco::ip::create_axi_sc "out_ic" 1 4]
+    }
     tapasco::ip::connect_sc_default_clocks $out_ic "host"
 
     connect_bd_intf_net [get_bd_intf_pins -regexp $pcie/M_AXI(_B)?] \
@@ -297,6 +305,9 @@
     connect_bd_intf_net [get_bd_intf_pins -of_objects $out_ic -filter {NAME == M01_AXI}] $m_intc
     connect_bd_intf_net [get_bd_intf_pins -of_objects $out_ic -filter {NAME == M02_AXI}] $m_tapasco
     connect_bd_intf_net [get_bd_intf_pins -of_objects $out_ic -filter {NAME == M03_AXI}] $m_dma
+    if {[tapasco::is_feature_enabled "JtagDebug"]} {
+        connect_bd_intf_net [get_bd_intf_pins -of_objects $out_ic -filter {NAME == M04_AXI}] $m_debug
+    }
 
     # forward PCIe clock to external ports
     connect_bd_net [get_bd_pins axi_pcie3_0/axi_aclk] $pcie_aclk
