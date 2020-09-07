@@ -33,6 +33,11 @@ use std::sync::Arc;
 pub enum Error {
     #[snafu(display("No memory of size {} available.", size))]
     OutOfMemory { size: DeviceSize },
+    #[snafu(display("Memory of size {} at offset 0x{:x} not available.", size, offset))]
+    FixedNotAvailable {
+        size: DeviceSize,
+        offset: DeviceAddress,
+    },
     #[snafu(display("Invalid memory size {}.", size))]
     InvalidSize { size: DeviceSize },
     #[snafu(display("Invalid memory alignment {}.", alignment))]
@@ -41,11 +46,14 @@ pub enum Error {
     UnknownMemory { ptr: DeviceAddress },
     #[snafu(display("Could not free memory: {}", source))]
     IOCTLFree { source: nix::Error },
+    #[snafu(display("Fixed allocator is not implemented in driver."))]
+    NoFixedInDriver {},
 }
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub trait Allocator: Debug {
     fn allocate(&mut self, size: DeviceSize) -> Result<DeviceAddress>;
+    fn allocate_fixed(&mut self, size: DeviceSize, offset: DeviceAddress) -> Result<DeviceAddress>;
     fn free(&mut self, ptr: DeviceAddress) -> Result<()>;
 }
 
@@ -156,6 +164,80 @@ impl Allocator for GenericAllocator {
         }
     }
 
+    fn allocate_fixed(&mut self, size: DeviceSize, offset: DeviceAddress) -> Result<DeviceAddress> {
+        if size == 0 {
+            return Err(Error::InvalidSize { size: size });
+        }
+        trace!("Looking for free memory at offset 0x{:x}.", offset);
+        let size_aligned = self.fix_alignment(size);
+        let mut element_found = None;
+        let mut addr_found = None;
+        for (i, s) in &mut self.memory_free.iter_mut().enumerate() {
+            let segment_end = s.base + s.size;
+            if s.base <= offset && offset <= segment_end && segment_end - offset >= size_aligned {
+                trace!("Found fixed free space in segment {:?}.", s);
+                addr_found = Some(offset);
+                self.memory_used.push(MemoryFree {
+                    base: offset,
+                    size: size_aligned,
+                });
+
+                element_found = Some(i);
+                break;
+            }
+        }
+
+        match element_found {
+            Some(x) => {
+                trace!("Splitting old segment.");
+                if self.memory_free[x].base == offset {
+                    self.memory_free[x].base += size_aligned;
+                    self.memory_free[x].size -= size_aligned;
+                } else {
+                    let left_size = offset - self.memory_free[x].base;
+
+                    let split_segment = MemoryFree {
+                        base: offset + size_aligned,
+                        size: self.memory_free[x].size - (left_size + size_aligned),
+                    };
+
+                    if split_segment.size > 0 {
+                        self.memory_free.insert(x + 1, split_segment);
+                        trace!("New segment right of allocated area: {:?}.", split_segment);
+                    }
+
+                    self.memory_free[x].size = left_size;
+                }
+                if self.memory_free[x].size == 0 {
+                    trace!("Segment left of allocated area empty -> Removed.");
+                    self.memory_free.remove(x);
+                } else {
+                    trace!(
+                        "New segment left of allocated area: {:?}.",
+                        self.memory_free[x]
+                    );
+                }
+            }
+            None => (),
+        };
+
+        match addr_found {
+            Some(x) => Ok(x),
+            None => {
+                trace!(
+                    "Could not find free memory {}B @ {:x}: {:?}.",
+                    size_aligned,
+                    offset,
+                    self
+                );
+                Err(Error::FixedNotAvailable {
+                    size: size_aligned,
+                    offset: offset,
+                })
+            }
+        }
+    }
+
     fn free(&mut self, ptr: DeviceAddress) -> Result<()> {
         match self.memory_used.iter().position(|&x| x.base == ptr) {
             Some(x) => {
@@ -185,76 +267,136 @@ impl Allocator for GenericAllocator {
     }
 }
 
-#[test]
-fn complete_allocate() -> Result<()> {
-    let mut a = GenericAllocator::new(0, 1024, 64)?;
-    let m = a.allocate(1024)?;
-    assert_eq!(m, 0);
-    assert_eq!(a.free(m), Ok(()));
-    Ok(())
-}
+#[cfg(test)]
+mod allocator_tests {
+    use crate::allocator::Allocator;
+    use crate::allocator::Error;
+    use crate::allocator::GenericAllocator;
+    use crate::allocator::Result;
 
-#[test]
-fn alloc_free_alloc() -> Result<()> {
-    let mut a = GenericAllocator::new(0, 1024, 64)?;
-    let m = a.allocate(1024)?;
-    assert_eq!(m, 0);
-    assert_eq!(a.free(m), Ok(()));
-    let m2 = a.allocate(1024)?;
-    assert_eq!(m2, 0);
-    assert_eq!(a.free(m2), Ok(()));
-    Ok(())
-}
+    fn init() {
+        let _ = env_logger::builder().is_test(true).try_init();
+    }
 
-#[test]
-fn alloc_free_alloc2() -> Result<()> {
-    let mut a = GenericAllocator::new(0, 1024, 64)?;
-    let m = a.allocate(512)?;
-    let m2 = a.allocate(512)?;
-    assert_eq!(m, 0);
-    assert_eq!(m2, 512);
-    assert_eq!(a.free(m), Ok(()));
-    assert_eq!(a.allocate(1024), Err(Error::OutOfMemory { size: 1024 }));
-    assert_eq!(a.free(m2), Ok(()));
-    let m3 = a.allocate(768)?;
-    assert_eq!(m3, 0);
-    assert_eq!(a.free(m3), Ok(()));
-    Ok(())
-}
+    #[test]
+    fn complete_allocate() -> Result<()> {
+        init();
+        let mut a = GenericAllocator::new(0, 1024, 64)?;
+        let m = a.allocate(1024)?;
+        assert_eq!(m, 0);
+        assert_eq!(a.free(m), Ok(()));
+        Ok(())
+    }
 
-#[test]
-fn alloc_free_alloc3() -> Result<()> {
-    let mut a = GenericAllocator::new(0, 1024, 64)?;
-    let m = a.allocate(512)?;
-    let m2 = a.allocate(512)?;
-    assert_eq!(m, 0);
-    assert_eq!(m2, 512);
-    assert_eq!(a.free(m), Ok(()));
-    let m4 = a.allocate(8)?;
-    let m5 = a.allocate(32)?;
-    assert_eq!(a.allocate(1024), Err(Error::OutOfMemory { size: 1024 }));
-    assert_eq!(a.free(m2), Ok(()));
-    let m3 = a.allocate(768)?;
-    assert_eq!(a.free(m3), Ok(()));
-    assert_eq!(a.free(m4), Ok(()));
-    assert_eq!(a.free(m5), Ok(()));
-    let _ = a.allocate(1024)?;
-    Ok(())
-}
+    #[test]
+    fn allocated_fixed_single() -> Result<()> {
+        init();
+        let mut a = GenericAllocator::new(0, 1024, 64)?;
+        let m = a.allocate_fixed(128, 512)?;
+        assert_eq!(m, 512);
+        assert_eq!(a.free(m), Ok(()));
+        let m2 = a.allocate(1024)?;
+        assert_eq!(m2, 0);
+        assert_eq!(a.free(m2), Ok(()));
+        Ok(())
+    }
 
-#[test]
-fn freeing_unknown() -> Result<()> {
-    let mut a = GenericAllocator::new(0, 1024, 64)?;
-    assert_eq!(a.free(0), Err(Error::UnknownMemory { ptr: 0 }));
-    Ok(())
-}
+    #[test]
+    fn allocated_fixed_multiple() -> Result<()> {
+        init();
+        let mut a = GenericAllocator::new(0, 1024, 64)?;
+        let m = a.allocate_fixed(128, 512)?;
+        assert_eq!(m, 512);
+        let m2 = a.allocate_fixed(128, 128)?;
+        assert_eq!(m2, 128);
+        let m3 = a.allocate_fixed(128, 768)?;
+        assert_eq!(m3, 768);
+        assert_eq!(a.free(m), Ok(()));
+        assert_eq!(a.free(m2), Ok(()));
+        assert_eq!(a.free(m3), Ok(()));
+        Ok(())
+    }
 
-#[test]
-fn empty_allocate() -> Result<()> {
-    let mut a = GenericAllocator::new(0, 1024, 64)?;
-    let m = a.allocate(0);
-    assert_eq!(m, Err(Error::InvalidSize { size: 0 }));
-    Ok(())
+    #[test]
+    fn allocated_fixed_large() -> Result<()> {
+        init();
+        let mut a = GenericAllocator::new(0, 0x100000, 64)?;
+        let m = a.allocate(1228)?;
+        assert_eq!(m, 0);
+        let m2 = a.allocate_fixed(2048, 0x80000)?;
+        assert_eq!(m2, 0x80000);
+        assert_eq!(a.free(m), Ok(()));
+        assert_eq!(a.free(m2), Ok(()));
+        Ok(())
+    }
+
+    #[test]
+    fn alloc_free_alloc() -> Result<()> {
+        init();
+        let mut a = GenericAllocator::new(0, 1024, 64)?;
+        let m = a.allocate(1024)?;
+        assert_eq!(m, 0);
+        assert_eq!(a.free(m), Ok(()));
+        let m2 = a.allocate(1024)?;
+        assert_eq!(m2, 0);
+        assert_eq!(a.free(m2), Ok(()));
+        Ok(())
+    }
+
+    #[test]
+    fn alloc_free_alloc2() -> Result<()> {
+        init();
+        let mut a = GenericAllocator::new(0, 1024, 64)?;
+        let m = a.allocate(512)?;
+        let m2 = a.allocate(512)?;
+        assert_eq!(m, 0);
+        assert_eq!(m2, 512);
+        assert_eq!(a.free(m), Ok(()));
+        assert_eq!(a.allocate(1024), Err(Error::OutOfMemory { size: 1024 }));
+        assert_eq!(a.free(m2), Ok(()));
+        let m3 = a.allocate(768)?;
+        assert_eq!(m3, 0);
+        assert_eq!(a.free(m3), Ok(()));
+        Ok(())
+    }
+
+    #[test]
+    fn alloc_free_alloc3() -> Result<()> {
+        init();
+        let mut a = GenericAllocator::new(0, 1024, 64)?;
+        let m = a.allocate(512)?;
+        let m2 = a.allocate(512)?;
+        assert_eq!(m, 0);
+        assert_eq!(m2, 512);
+        assert_eq!(a.free(m), Ok(()));
+        let m4 = a.allocate(8)?;
+        let m5 = a.allocate(32)?;
+        assert_eq!(a.allocate(1024), Err(Error::OutOfMemory { size: 1024 }));
+        assert_eq!(a.free(m2), Ok(()));
+        let m3 = a.allocate(768)?;
+        assert_eq!(a.free(m3), Ok(()));
+        assert_eq!(a.free(m4), Ok(()));
+        assert_eq!(a.free(m5), Ok(()));
+        let _ = a.allocate(1024)?;
+        Ok(())
+    }
+
+    #[test]
+    fn freeing_unknown() -> Result<()> {
+        init();
+        let mut a = GenericAllocator::new(0, 1024, 64)?;
+        assert_eq!(a.free(0), Err(Error::UnknownMemory { ptr: 0 }));
+        Ok(())
+    }
+
+    #[test]
+    fn empty_allocate() -> Result<()> {
+        init();
+        let mut a = GenericAllocator::new(0, 1024, 64)?;
+        let m = a.allocate(0);
+        assert_eq!(m, Err(Error::InvalidSize { size: 0 }));
+        Ok(())
+    }
 }
 
 #[derive(Debug, Getters)]
@@ -284,6 +426,15 @@ impl Allocator for DriverAllocator {
             Err(_e) => Err(Error::OutOfMemory { size: size }),
         }
     }
+
+    fn allocate_fixed(
+        &mut self,
+        _size: DeviceSize,
+        _offset: DeviceAddress,
+    ) -> Result<DeviceAddress> {
+        Err(Error::NoFixedInDriver {})
+    }
+
     fn free(&mut self, ptr: DeviceAddress) -> Result<()> {
         trace!("Dellocating address 0x{:x} through driver.", ptr);
         let mut cmd = tlkm_mm_cmd {
