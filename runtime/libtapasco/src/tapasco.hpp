@@ -370,7 +370,7 @@ private:
 class TapascoDebug {
 public:
   TapascoDebug(TLKM *tlkm) {
-    this->debug = tapasco_tlkm_debug_alloc(tlkm); 
+    this->debug = tapasco_tlkm_debug_alloc(tlkm);
     if (this->debug == 0) {
       handle_error();
     }
@@ -382,14 +382,14 @@ public:
     }
   }
 
-  int read_dtm(uint32_t reg_addr) {
+  uint32_t read_dtm(uint32_t reg_addr) {
     return tapasco_debug_read_dtm_reg(this->debug, reg_addr);
   }
   void write_dtm(uint32_t reg_addr, uint32_t data) {
     return tapasco_debug_write_dtm_reg(this->debug, reg_addr, data);
   }
 
-  int read_dm_reg(uint32_t reg_addr) {
+  uint32_t read_dm_reg(uint32_t reg_addr) {
     return tapasco_debug_read_dm_reg(this->debug, reg_addr);
   }
 
@@ -397,6 +397,33 @@ public:
     tapasco_debug_write_dm_reg(this->debug, reg_addr, data);
   }
 
+  void activate_dm() {
+    tapasco_debug_activate_dm(this->debug);
+  }
+
+  void halt_core() {
+    tapasco_debug_halt_core(this->debug);
+  }
+
+  void resume_core() {
+    tapasco_debug_resume_core(this->debug);
+  }
+
+  bool is_core_halted() {
+    tapasco_debug_is_core_halted(this->debug);
+  }
+
+  uint32_t abstract_register_read(uint32_t reg_addr) {
+    return tapasco_debug_abstract_register_read(this->debug, reg_addr);
+  }
+
+  uint32_t abstract_memory_read(uint32_t reg_addr) {
+    return tapasco_debug_abstract_memory_read(this->debug, reg_addr);
+  }
+
+  void abstract_memory_write(uint32_t reg_addr, uint32_t data) {
+    return tapasco_debug_abstract_memory_write(this->debug, reg_addr, data);
+  }
 private:
   JTAGDebug *debug;
 };

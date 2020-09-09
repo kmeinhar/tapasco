@@ -898,7 +898,7 @@ pub extern "C" fn tapasco_debug_read_dtm_reg(debug: *mut JTAGDebug, reg_addr: u3
     }
 
     let tl = unsafe { &mut *debug };
-    match tl.debug_read_dtm_reg(reg_addr).context(DebugError) {
+    match tl.read_dtm_reg(reg_addr).context(DebugError) {
         Ok(x) => x,
         Err(e) => {
             update_last_error(e);
@@ -916,7 +916,7 @@ pub extern "C" fn tapasco_debug_write_dtm_reg(debug: *mut JTAGDebug, reg_addr: u
     }
 
     let tl = unsafe { &mut *debug };
-    match tl.debug_write_dtm_reg(reg_addr, data).context(DebugError) {
+    match tl.write_dtm_reg(reg_addr, data).context(DebugError) {
         Ok(_) => (),
         Err(e) => {
             update_last_error(e);
@@ -934,7 +934,7 @@ pub extern "C" fn tapasco_debug_read_dm_reg(debug: *mut JTAGDebug, reg_addr: u32
     }
 
     let tl = unsafe { &mut *debug};
-    match tl.debug_read_dm_reg(reg_addr).context(DebugError) {
+    match tl.read_dm_reg(reg_addr).context(DebugError) {
         Ok(x) => x,
         Err(e) => {
             update_last_error(e);
@@ -952,7 +952,133 @@ pub extern "C" fn tapasco_debug_write_dm_reg(debug: *mut JTAGDebug, reg_addr: u3
     }
 
     let tl = unsafe { &mut *debug };
-    match tl.debug_write_dm_reg(reg_addr, data).context(DebugError) {
+    match tl.write_dm_reg(reg_addr, data).context(DebugError) {
+        Ok(_) => (),
+        Err(e) => {
+            update_last_error(e);
+            ()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tapasco_debug_activate_dm(debug: *mut JTAGDebug) {
+    if debug.is_null() {
+        warn!("Null pointer passed into tapasco_debug_activate_dm() as the device");
+        update_last_error(Error::NullPointerTLKM {});
+        return ();
+    }
+
+    let tl = unsafe { &mut *debug };
+    match tl.activate_dm().context(DebugError) {
+        Ok(_) => (),
+        Err(e) => {
+            update_last_error(e);
+            ()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tapasco_debug_halt_core(debug: *mut JTAGDebug) {
+    if debug.is_null() {
+        warn!("Null pointer passed into tapasco_debug_halt_core() as the device");
+        update_last_error(Error::NullPointerTLKM {});
+        return ();
+    }
+
+    let tl = unsafe { &mut *debug };
+    match tl.halt_core().context(DebugError) {
+        Ok(_) => (),
+        Err(e) => {
+            update_last_error(e);
+            ()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tapasco_debug_resume_core(debug: *mut JTAGDebug) {
+    if debug.is_null() {
+        warn!("Null pointer passed into tapasco_debug_resume_core() as the device");
+        update_last_error(Error::NullPointerTLKM {});
+        return ();
+    }
+
+    let tl = unsafe { &mut *debug };
+    match tl.resume_core().context(DebugError) {
+        Ok(_) => (),
+        Err(e) => {
+            update_last_error(e);
+            ()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tapasco_debug_is_core_halted(debug: *mut JTAGDebug) -> bool {
+    if debug.is_null() {
+        warn!("Null pointer passed into tapasco_debug_resume_core() as the device");
+        update_last_error(Error::NullPointerTLKM {});
+        return false;
+    }
+
+    let tl = unsafe { &mut *debug };
+    match tl.is_core_halted().context(DebugError) {
+        Ok(x) => x,
+        Err(e) => {
+            update_last_error(e);
+            false
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tapasco_debug_abstract_register_read(debug: *mut JTAGDebug, reg_addr: u32) -> u32 {
+    if debug.is_null() {
+        warn!("Null pointer passed into tapasco_debug_write_dm_reg() as the device");
+        update_last_error(Error::NullPointerTLKM {});
+        return 0;
+    }
+
+    let tl = unsafe { &mut *debug };
+    match tl.abstract_register_read(reg_addr).context(DebugError) {
+        Ok(x) => x,
+        Err(e) => {
+            update_last_error(e);
+            0
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tapasco_debug_abstract_memory_read(debug: *mut JTAGDebug, mem_addr: u32) -> u32 {
+    if debug.is_null() {
+        warn!("Null pointer passed into tapasco_debug_write_dm_reg() as the device");
+        update_last_error(Error::NullPointerTLKM {});
+        return 0;
+    }
+
+    let tl = unsafe { &mut *debug };
+    match tl.abstract_memory_read(mem_addr).context(DebugError) {
+        Ok(x) => x,
+        Err(e) => {
+            update_last_error(e);
+            0
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tapasco_debug_abstract_memory_write(debug: *mut JTAGDebug, mem_addr: u32, data: u32) {
+    if debug.is_null() {
+        warn!("Null pointer passed into tapasco_debug_abstract_memory_write() as the device");
+        update_last_error(Error::NullPointerTLKM {});
+        return ();
+    }
+
+    let tl = unsafe { &mut *debug };
+    match tl.abstract_memory_write(mem_addr, data).context(DebugError) {
         Ok(_) => (),
         Err(e) => {
             update_last_error(e);
