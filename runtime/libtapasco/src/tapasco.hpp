@@ -361,26 +361,44 @@ public:
     return tapasco_device_debug_offset(this->device);
   }
 
-  int debug_read_dtm(uint32_t reg_addr) {
-    return tapasco_device_debug_read_dtm_reg(this->device, reg_addr);
-  }
-
-  void debug_write_dtm(uint32_t reg_addr, uint32_t data) {
-    return tapasco_device_debug_write_dtm_reg(this->device, reg_addr, data);
-  }
-
-  int debug_read_dm_reg(uint32_t reg_addr) {
-    return tapasco_device_debug_read_dm_reg(this->device, reg_addr);
-  }
-
-  void debug_write_dm_reg(uint32_t reg_addr, uint32_t data) {
-    tapasco_device_debug_write_dm_reg(this->device, reg_addr, data);
-  }
-
   Device *get_device() { return this->device; }
 
 private:
   Device *device{0};
+};
+
+class TapascoDebug {
+public:
+  TapascoDebug(TLKM *tlkm) {
+    this->debug = tapasco_tlkm_debug_alloc(tlkm); 
+    if (this->debug == 0) {
+      handle_error();
+    }
+  }
+
+  virtual ~TapascoDebug() {
+    if (this->debug != 0) {
+        this->debug = 0;
+    }
+  }
+
+  int read_dtm(uint32_t reg_addr) {
+    return tapasco_debug_read_dtm_reg(this->debug, reg_addr);
+  }
+  void write_dtm(uint32_t reg_addr, uint32_t data) {
+    return tapasco_debug_write_dtm_reg(this->debug, reg_addr, data);
+  }
+
+  int read_dm_reg(uint32_t reg_addr) {
+    return tapasco_debug_read_dm_reg(this->debug, reg_addr);
+  }
+
+  void write_dm_reg(uint32_t reg_addr, uint32_t data) {
+    tapasco_debug_write_dm_reg(this->debug, reg_addr, data);
+  }
+
+private:
+  JTAGDebug *debug;
 };
 
 class TapascoDriver {
@@ -429,6 +447,10 @@ public:
       handle_error();
     }
     return num_devices;
+  }
+
+  TapascoDebug allocate_jtag_debug () {
+    return TapascoDebug(this->tlkm);
   }
 
 private:
@@ -593,18 +615,8 @@ struct Tapasco {
 
   int debug_offset() { return this->device_internal.debug_offset(); }
 
-  int debug_read_dtm(uint32_t reg_addr) { return this->device_internal.debug_read_dtm(reg_addr); }
-
-  void debug_write_dtm(uint32_t reg_addr, uint32_t data) {
-      return this->device_internal.debug_write_dtm(reg_addr, data);
-  }
-
-  uint32_t debug_read_dm_reg(uint32_t reg_addr) {
-      return this->device_internal.debug_read_dm_reg(reg_addr);
-  }
-
-  void debug_write_dm_reg(uint32_t reg_addr, uint32_t data) {
-      this->device_internal.debug_write_dm_reg(reg_addr, data);
+  TapascoDebug allocate_jtag_debug() {
+    return this->driver_internal.allocate_jtag_debug();
   }
 
   std::string version() {

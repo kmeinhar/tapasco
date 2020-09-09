@@ -18,7 +18,6 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use byteorder::{ByteOrder, LittleEndian};
 use crate::allocator::{Allocator, DriverAllocator, GenericAllocator};
 use crate::dma::{DMAControl, DirectDMA, DriverDMA};
 use crate::job::Job;
@@ -499,38 +498,6 @@ impl Device {
             })
             .offset;
         Ok(freq as i32)
-    }
-
-    pub fn debug_read_dtm_reg(&self, reg_addr: u32) -> Result<u32> {
-        if reg_addr > 4 {
-            return Err(Error::AreaMissing{area: "Only register 0 - 4 available!".to_string(),})
-        }
-        let start_addr = (reg_addr * 4) as usize;
-        let mut dst = [0; 1];
-        LittleEndian::read_u32_into(&self.debug[start_addr..(start_addr + 4)], &mut dst);
-        Ok(dst[0] as u32)
-    }
-
-    pub fn debug_write_dtm_reg(&mut self, reg_addr: u32, data: u32) -> Result<()> {
-        if reg_addr > 4 {
-            return Err(Error::AreaMissing{area: "Only register 0 - 4 available!".to_string(),})
-        }
-        let start_addr = (reg_addr * 4) as usize;
-        LittleEndian::write_u32(&mut self.debug[start_addr..(start_addr + 4)], data);
-        Ok(())
-    }
-
-    pub fn debug_read_dm_reg(&mut self, reg_addr: u32) -> Result<u32> {
-        LittleEndian::write_u32(&mut self.debug[16..20], reg_addr);
-        let mut dst = [0; 1];
-        LittleEndian::read_u32_into(&self.debug[12..16], &mut dst);
-        Ok(dst[0] as u32)
-    }
-
-    pub fn debug_write_dm_reg(&mut self, reg_addr: u32, data: u32) -> Result<()> {
-        LittleEndian::write_u32(&mut self.debug[16..20], reg_addr);
-        LittleEndian::write_u32(&mut self.debug[12..16], data);
-        Ok(())
     }
 
     /// Return frequency in MHz used by the memory as indicated by the status core.

@@ -43,4 +43,5 @@ pub mod ffi;
 pub mod job;
 pub mod pe;
 pub mod scheduler;
+pub mod jtagdebug;
 pub mod tlkm;
