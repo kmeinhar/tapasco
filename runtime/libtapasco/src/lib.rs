@@ -37,6 +37,7 @@ extern crate volatile;
 extern crate byteorder;
 
 pub mod allocator;
+pub mod debug;
 pub mod device;
 pub mod dma;
 pub mod ffi;
