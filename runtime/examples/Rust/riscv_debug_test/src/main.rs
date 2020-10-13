@@ -6,17 +6,15 @@ extern crate snafu;
 extern crate getset;
 
 mod tapasco_riscv_capnp {
+    #![allow(dead_code)]
     include!("../schema/tapasco_riscv_capnp.rs");
 }
 
 use std::process;
-use std::slice;
-use std::io::{Read, BufRead, BufReader, BufWriter};
-use std::os::unix::net::{UnixStream,UnixListener};
-use std::path::{Path, PathBuf};
-use crossbeam::thread;
+use std::io::Read;
+use std::os::unix::net::{UnixListener};
+use std::time::Duration;
 use tapasco::tlkm::*;
-use tapasco::job::*;
 use tapasco::device::*;
 use tapasco::debug::*;
 use tapasco::debug::Error as DebugError;
@@ -27,10 +25,9 @@ use std::sync::Arc;
 use core::fmt::Debug;
 use volatile::Volatile;
 
-use capnp::*;
-
-use tapasco_riscv_capnp::*;
-use crate::request::request::Which::*;
+use capnp::{serialize};
+use crate::tapasco_riscv_capnp::{request, read_rsp, write_rsp};
+use crate::tapasco_riscv_capnp::request::request::Which::{Read as ReadReq, Write as WriteReq};
 
 
 #[derive(Debug, Snafu)]
@@ -46,6 +43,12 @@ pub enum Error {
 
     #[snafu(display("Error while enabling debug: {}", source))]
     DebugEnableError { source: tapasco::job::Error },
+
+    #[snafu(display("Error executing serialization with cap'n proto: {}", source))]
+    CapnpError { source: capnp::Error },
+
+    #[snafu(display("Request was not in schema: {}", source))]
+    CapnpSchemaError { source: capnp::NotInSchema},
 
     #[snafu(display("Error while creating io Socket: {}", source))]
     DebugIoError { source: std::io::Error },
@@ -107,79 +110,87 @@ impl RiscvDebug {
 
         self.handle_ctrl_c();
 
-        match listener.accept() {
-            Ok((mut stream, addr)) => {
-                //stream.write_all(b"Thanks");
+        let connection = listener.accept().context(DebugIoError)?;
+        let mut stream = connection.0;
 
-                println!("Handling RISC-V debug connection");
+        println!("Handling RISC-V debug connection");
 
-                //let mut stream = stream.context(DebugIoError)?;
+        stream.set_read_timeout(Some(Duration::new(1, 0))).expect("Couldn't set read timeout");
 
-                loop {
+        loop {
+            // Read a message from socket
+            let mut buffer = [0; 100];
+            match stream.read(&mut buffer).context(DebugIoError)? {
+                    x if x < 1 => return Err(Error::InputError {value: x}),
+                    _x => (),//println!("Got input of size: {}", x),
+            };
 
-                    // Read a message from socket
-                    let mut buffer = [0; 100];
-                    match stream.read(&mut buffer).context(DebugIoError)? {
-                        x if x < 1 => return Err(Error::InputError {value: x}),
-                        x => (),//println!("Got input of size: {}", x),
+            // Decode the message from socket
+            let mut buffer2 = &buffer[..];
+            let message_reader = serialize::read_message_from_flat_slice(&mut buffer2,
+                                    ::capnp::message::ReaderOptions::new()).context(CapnpError)?;
+
+            let request = message_reader.get_root::<request::Reader>().context(CapnpError)?;
+
+            let request = request.get_request().which().context(CapnpSchemaError)?;
+            match request {
+                ReadReq(Ok(read_req)) => {
+                    if read_req.get_addr() != 0xc {
+                        println!("Got read at address: {}", read_req.get_addr());
+                    }
+
+                    let offset = self.offset as isize;
+                    let r = match read_req.get_addr() {
+                        // TODO Workaround since DTMCS currently returns wrong val
+                        x if x == 8 => 0x71,
+                        x => unsafe {
+                            let ptr = self.debug_mem.as_ptr().offset(offset + (x as isize));
+                            let volatile_ptr = ptr as *mut Volatile<u32>;
+                            (*volatile_ptr).read()
+                        }
                     };
 
+                    // Respond with a message
+                    let mut message = ::capnp::message::Builder::new_default();
+                    let mut read_rsp = message.init_root::<read_rsp::Builder>();
 
+                    read_rsp.set_data(r as u32);
+                    read_rsp.set_is_read(true);
 
-                    // Decode the message from socket
-                    let mut buffer2 = &buffer[..];
-                    let message_reader = serialize::read_message_from_flat_slice(&mut buffer2,
-                                            ::capnp::message::ReaderOptions::new()).unwrap();
+                    if read_req.get_addr() != 0xc {
+                        println!("Responding read with: {:#X}", r);
+                    }
 
-                    let request = message_reader.get_root::<request::Reader>().unwrap();
+                    let copy = stream.try_clone().expect("try_clone failed");
+                    serialize::write_message(copy, &message).context(CapnpError)?;
 
-                    match request.get_request().which().unwrap() {
-                        Read(Ok(read_req)) => {
-                            println!("Got read at address: {}", read_req.get_addr());
+                },
+                WriteReq(Ok(write_req)) => {
+                    if write_req.get_addr() != 0x10 {
+                        println!("Got write at address: {} with {:#X}",
+                                 write_req.get_addr(), write_req.get_data());
+                    }
 
-                            let offset = self.offset as isize;
-                            let r = match read_req.get_addr() {
-                                // TODO Workaround since DTMCS currently returns wrong val
-                                x if x == 8 => 0x71,
-                                x => unsafe {
-                                    let ptr = self.debug_mem.as_ptr().offset(
-                                        offset + (read_req.get_addr() as isize));
-                                    let volatile_ptr = ptr as *mut Volatile<u32>;
-                                    (*volatile_ptr).read()
-                                }
-                            };
+                    let offset = self.offset as isize;
+                    unsafe {
+                        let ptr = self.debug_mem.as_ptr().offset(
+                            offset + (write_req.get_addr() as isize));
+                        let volatile_ptr = ptr as *mut Volatile<u32>;
+                        (*volatile_ptr).write(write_req.get_data())
+                    }
 
-                            // Respond with a message
-                            let mut message = ::capnp::message::Builder::new_default();
-                            let mut read_req = message.init_root::<read_rsp::Builder>();
+                    // Respond with a message to keep in sync
+                    let mut message = ::capnp::message::Builder::new_default();
+                    let mut write_rsp = message.init_root::<write_rsp::Builder>();
+                    write_rsp.set_is_read(false);
 
-                            read_req.set_data(r as u32);
-
-                            println!("Responding read with: {:#X}", r);
-
-                            let copy = stream.try_clone().expect("try_clone failed");
-                            serialize::write_message(copy, &message);
-
-                        },
-                        Write(Ok(write_req)) => {
-                            println!("Got write at address: {} with {:#X}",
-                                     write_req.get_addr(), write_req.get_data());
-
-                            let offset = self.offset as isize;
-                            unsafe {
-                                let ptr = self.debug_mem.as_ptr().offset(
-                                    offset + (write_req.get_addr() as isize));
-                                let volatile_ptr = ptr as *mut Volatile<u32>;
-                                (*volatile_ptr).write(write_req.get_data())
-                            }
-                        },
-                        _ => panic!("Could not decode request"),
-                    }; // reques.get_request().which()
-                } // loop
-            }, // Ok((mut stream, addr))
-            Err(e) => panic!("Error"),
-        } // listener.accept()
-        Ok(())
+                    let copy = stream.try_clone().expect("try_clone failed");
+                    serialize::write_message(copy, &message).context(CapnpError)?;
+                },
+                ReadReq(Err(e)) => panic!("Could not decode read request: {}", e),
+                WriteReq(Err(e)) => panic!("Could not decode write request: {}", e),
+            }; // reques.get_request().which()
+        } // loop
     }
 }
 
@@ -196,8 +207,8 @@ impl DebugControl for RiscvDebug {
                         println!("Connection was reset by client, closing debugger!");
                         Ok(())
                     }
-                    other_err => {
-                        println!("Unknown error while handling client: {}", source);
+                    _other_err => {
+                        println!("Unknown IO error while handling client: {}", source);
                         Ok(())
                     }
                 }
@@ -248,13 +259,36 @@ fn print_status(devices: &Vec<Device>) -> Result<()> {
     Ok(())
 }
 
-fn enable_debug(devices: &Vec<Device>) -> Result<Job> {
-    for x in devices {
-        let mut pe1 = x.acquire_pe(PICCOLO32_PE_ID).context(DeviceInit)?;
-        pe1.enable_debug().context(DebugEnableError)?;
-        return Ok(pe1);
-    }
-    DebugPeError{}.fail()
+
+fn execute_binary(devices: &Vec<Device>) -> Result<()> {
+    let args: Vec<String> = std::env::args().collect();
+    let file_name = &args[1];
+
+    let bytes = std::fs::read(file_name).context(DebugIoError)?;
+    let x = &devices[0];
+    let mut pe1 = x.acquire_pe(PICCOLO32_PE_ID).context(DeviceInit)?;
+    pe1.start(vec![tapasco::device::PEParameter::DataTransferLocal(
+        tapasco::device::DataTransferLocal {
+            data: bytes.into_boxed_slice(),
+            free: true,
+            from_device: false,
+            to_device: true,
+            fixed: None,
+        },
+    ),
+    tapasco::device::PEParameter::Single64(42),
+    tapasco::device::PEParameter::Single64(1337),
+    ]).context(JobError)?;
+
+    pe1.enable_debug().context(DebugEnableError)?;
+
+    let ret = match pe1.release(false, true) {
+        Ok(val) => val,
+        Err(e) => panic!("Got error during release: {}", e),
+    };
+    println!("Got return value: {:?}", ret);
+
+    Ok(())
 }
 
 fn run_test() -> Result<()> {
@@ -262,20 +296,8 @@ fn run_test() -> Result<()> {
     print_version(&tlkm)?;
     let devices = allocate_devices(&tlkm)?;
     print_status(&devices)?;
-    enable_debug(&devices)?;
 
-    /*
-    thread::scope(|s| {
-        s.spawn(|_| {
-            handle_client(self.debug_mem.clone(), self.offset);
-        });
-    });
-    */
- 
-    match std::fs::remove_file(SOCKET_FILE_NAME) {
-        Ok(_) => (),
-        Err(e) => panic!("Unable to delete socket file {}: {}", SOCKET_FILE_NAME, e),
-    }
+    execute_binary(&devices)?;
 
     Ok(())
 }

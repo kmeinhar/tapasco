@@ -12,7 +12,8 @@ struct ReadReq {
 }
 
 struct ReadRsp {
-    data @0 :UInt32;
+    isRead @0 :Bool;
+    data @1 :UInt32;
 }
 
 struct WriteReq {
@@ -20,3 +21,7 @@ struct WriteReq {
     data @1 :UInt32;
 }
 
+struct WriteRsp {
+    isRead @0 :Bool;
+    success @1 :Bool;
+}

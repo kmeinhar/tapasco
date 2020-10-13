@@ -100,12 +100,14 @@ ReadRsp_list new_ReadRsp_list(struct capn_segment *s, int len) {
 void read_ReadRsp(struct ReadRsp *s capnp_unused, ReadRsp_ptr p) {
 	capn_resolve(&p.p);
 	capnp_use(s);
-	s->data = capn_read32(p.p, 0);
+	s->isRead = (capn_read8(p.p, 0) & 1) != 0;
+	s->data = capn_read32(p.p, 4);
 }
 void write_ReadRsp(const struct ReadRsp *s capnp_unused, ReadRsp_ptr p) {
 	capn_resolve(&p.p);
 	capnp_use(s);
-	capn_write32(p.p, 0, s->data);
+	capn_write1(p.p, 0, s->isRead != 0);
+	capn_write32(p.p, 4, s->data);
 }
 void get_ReadRsp(struct ReadRsp *s, ReadRsp_list l, int i) {
 	ReadRsp_ptr p;
@@ -149,4 +151,37 @@ void set_WriteReq(const struct WriteReq *s, WriteReq_list l, int i) {
 	WriteReq_ptr p;
 	p.p = capn_getp(l.p, i, 0);
 	write_WriteReq(s, p);
+}
+
+WriteRsp_ptr new_WriteRsp(struct capn_segment *s) {
+	WriteRsp_ptr p;
+	p.p = capn_new_struct(s, 8, 0);
+	return p;
+}
+WriteRsp_list new_WriteRsp_list(struct capn_segment *s, int len) {
+	WriteRsp_list p;
+	p.p = capn_new_list(s, len, 8, 0);
+	return p;
+}
+void read_WriteRsp(struct WriteRsp *s capnp_unused, WriteRsp_ptr p) {
+	capn_resolve(&p.p);
+	capnp_use(s);
+	s->isRead = (capn_read8(p.p, 0) & 1) != 0;
+	s->success = (capn_read8(p.p, 0) & 2) != 0;
+}
+void write_WriteRsp(const struct WriteRsp *s capnp_unused, WriteRsp_ptr p) {
+	capn_resolve(&p.p);
+	capnp_use(s);
+	capn_write1(p.p, 0, s->isRead != 0);
+	capn_write1(p.p, 1, s->success != 0);
+}
+void get_WriteRsp(struct WriteRsp *s, WriteRsp_list l, int i) {
+	WriteRsp_ptr p;
+	p.p = capn_getp(l.p, i, 0);
+	read_WriteRsp(s, p);
+}
+void set_WriteRsp(const struct WriteRsp *s, WriteRsp_list l, int i) {
+	WriteRsp_ptr p;
+	p.p = capn_getp(l.p, i, 0);
+	write_WriteRsp(s, p);
 }
