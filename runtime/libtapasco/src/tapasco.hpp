@@ -410,7 +410,7 @@ public:
   }
 
   bool is_core_halted() {
-    tapasco_debug_is_core_halted(this->debug);
+    return tapasco_debug_is_core_halted(this->debug);
   }
 
   uint32_t abstract_register_read(uint32_t reg_addr) {
