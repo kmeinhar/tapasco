@@ -1,5 +1,5 @@
 
-if {[tapasco::is_feature_enabled "JtagDebug"]} {
+if {[tapasco::is_feature_enabled "PlatformJtagDebug"]} {
 proc create_custom_subsystem_jtag_debug {{args {}}} {
     puts "  creating debug subsystem"
 
@@ -37,7 +37,7 @@ proc create_custom_subsystem_jtag_debug {{args {}}} {
         set SWITCH "jtag_switch"
         set CHAIN  "jtag_chain"
 
-        set device_type [tapasco::get_feature_option "JtagDebug" "device_type" $SWITCH]
+        set device_type [tapasco::get_feature_option "PlatformJtagDebug" "device_type" $SWITCH]
 
         if {$device_type == $SWITCH} {
             # Create jtag switch to split one jtag interface into multiple
@@ -84,10 +84,11 @@ proc create_custom_subsystem_jtag_debug {{args {}}} {
         connect_bd_intf_net $convert_interface [lindex $jtag_slave_intf 0]
     }
 
+
     # Connect clk and reset to converter module
-    connect_bd_net [tapasco::subsystem::get_port "host" "clk"] \
+    connect_bd_net [tapasco::subsystem::get_port "design" "clk"] \
         [get_bd_pins -of_objects $axi_to_jtag_converter -filter {TYPE == clk && DIR == I}]
-    connect_bd_net [tapasco::subsystem::get_port "host" "rst" "peripheral" "resetn"] \
+    connect_bd_net [tapasco::subsystem::get_port "design" "rst" "peripheral" "resetn"] \
         [get_bd_pins -of_objects $axi_to_jtag_converter -filter {TYPE == rst && DIR == I}]
  
         return {}

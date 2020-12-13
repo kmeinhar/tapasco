@@ -270,7 +270,7 @@
     set pcie_aclk [create_bd_pin -type "clk" -dir "O" "pcie_aclk"]
     set pcie_aresetn [create_bd_pin -type "rst" -dir "O" "pcie_aresetn"]
     set msix_interface [create_bd_intf_pin -mode Slave -vlnv xilinx.com:interface:pcie3_cfg_msix_rtl:1.0 "S_MSIX"]
-    if {[tapasco::is_feature_enabled "JtagDebug"]} {
+    if {[tapasco::is_feature_enabled "PlatformJtagDebug"]} {
         set m_debug [create_bd_intf_pin -mode Master -vlnv xilinx.com:interface:aximm_rtl:1.0 "M_DEBUG"]
     }
 
@@ -284,7 +284,7 @@
         connect_bd_intf_net $msix_interface [get_bd_intf_pins $pcie/pcie_cfg_msix]
     }
 
-    if {[tapasco::is_feature_enabled "JtagDebug"]} {
+    if {[tapasco::is_feature_enabled "PlatformJtagDebug"]} {
         set out_ic [tapasco::ip::create_axi_sc "out_ic" 1 5]
     } else {
         set out_ic [tapasco::ip::create_axi_sc "out_ic" 1 4]
@@ -305,7 +305,7 @@
     connect_bd_intf_net [get_bd_intf_pins -of_objects $out_ic -filter {NAME == M01_AXI}] $m_intc
     connect_bd_intf_net [get_bd_intf_pins -of_objects $out_ic -filter {NAME == M02_AXI}] $m_tapasco
     connect_bd_intf_net [get_bd_intf_pins -of_objects $out_ic -filter {NAME == M03_AXI}] $m_dma
-    if {[tapasco::is_feature_enabled "JtagDebug"]} {
+    if {[tapasco::is_feature_enabled "PlatformJtagDebug"]} {
         connect_bd_intf_net [get_bd_intf_pins -of_objects $out_ic -filter {NAME == M04_AXI}] $m_debug
     }
 

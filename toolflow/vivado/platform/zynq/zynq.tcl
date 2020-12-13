@@ -254,7 +254,7 @@ namespace eval ::platform {
       lappend gp1_masters [create_bd_intf_pin -mode Master -vlnv $aximm_vlnv [format "M_%s" [string toupper $ss]]]
     }
     lappend gp1_masters [create_bd_intf_pin -mode Master -vlnv $aximm_vlnv "M_TAPASCO"]
-    if {[tapasco::is_feature_enabled "JtagDebug"]} {
+    if {[tapasco::is_feature_enabled "PlatformJtagDebug"]} {
         lappend gp1_masters [create_bd_intf_pin -mode Master -vlnv $aximm_vlnv "M_DEBUG"]
     }
 
