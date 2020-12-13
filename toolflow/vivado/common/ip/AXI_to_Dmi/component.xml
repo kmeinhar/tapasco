@@ -399,6 +399,14 @@
         </spirit:portMap>
         <spirit:portMap>
           <spirit:logicalPort>
+            <spirit:name>REQ_W_ADDRESS</spirit:name>
+          </spirit:logicalPort>
+          <spirit:physicalPort>
+            <spirit:name>REQ_W_ADDRESS</spirit:name>
+          </spirit:physicalPort>
+        </spirit:portMap>
+        <spirit:portMap>
+          <spirit:logicalPort>
             <spirit:name>REQ_DATA</spirit:name>
           </spirit:logicalPort>
           <spirit:physicalPort>
@@ -411,6 +419,30 @@
           </spirit:logicalPort>
           <spirit:physicalPort>
             <spirit:name>REQ_OP</spirit:name>
+          </spirit:physicalPort>
+        </spirit:portMap>
+        <spirit:portMap>
+          <spirit:logicalPort>
+            <spirit:name>REQ_READ</spirit:name>
+          </spirit:logicalPort>
+          <spirit:physicalPort>
+            <spirit:name>REQ_READ</spirit:name>
+          </spirit:physicalPort>
+        </spirit:portMap>
+        <spirit:portMap>
+          <spirit:logicalPort>
+            <spirit:name>REQ_WRITE</spirit:name>
+          </spirit:logicalPort>
+          <spirit:physicalPort>
+            <spirit:name>REQ_WRITE</spirit:name>
+          </spirit:physicalPort>
+        </spirit:portMap>
+        <spirit:portMap>
+          <spirit:logicalPort>
+            <spirit:name>REQ_ACCESS</spirit:name>
+          </spirit:logicalPort>
+          <spirit:physicalPort>
+            <spirit:name>REQ_ACCESS</spirit:name>
           </spirit:physicalPort>
         </spirit:portMap>
         <spirit:portMap>
@@ -443,38 +475,6 @@
           </spirit:logicalPort>
           <spirit:physicalPort>
             <spirit:name>RSP_OP</spirit:name>
-          </spirit:physicalPort>
-        </spirit:portMap>
-        <spirit:portMap>
-          <spirit:logicalPort>
-            <spirit:name>REQ_W_ADDRESS</spirit:name>
-          </spirit:logicalPort>
-          <spirit:physicalPort>
-            <spirit:name>REQ_W_ADDRESS</spirit:name>
-          </spirit:physicalPort>
-        </spirit:portMap>
-        <spirit:portMap>
-          <spirit:logicalPort>
-            <spirit:name>REQ_READ</spirit:name>
-          </spirit:logicalPort>
-          <spirit:physicalPort>
-            <spirit:name>REQ_READ</spirit:name>
-          </spirit:physicalPort>
-        </spirit:portMap>
-        <spirit:portMap>
-          <spirit:logicalPort>
-            <spirit:name>REQ_WRITE</spirit:name>
-          </spirit:logicalPort>
-          <spirit:physicalPort>
-            <spirit:name>REQ_WRITE</spirit:name>
-          </spirit:physicalPort>
-        </spirit:portMap>
-        <spirit:portMap>
-          <spirit:logicalPort>
-            <spirit:name>REQ_ACCESS</spirit:name>
-          </spirit:logicalPort>
-          <spirit:physicalPort>
-            <spirit:name>REQ_ACCESS</spirit:name>
           </spirit:physicalPort>
         </spirit:portMap>
       </spirit:portMaps>
@@ -484,11 +484,11 @@
     <spirit:memoryMap>
       <spirit:name>s_AXI_Dmi</spirit:name>
       <spirit:addressBlock>
-        <spirit:name>reg0</spirit:name>
-        <spirit:baseAddress spirit:format="bitString" spirit:bitStringLength="32">0</spirit:baseAddress>
-        <spirit:range spirit:format="long" spirit:minimum="4096" spirit:rangeType="long">4096</spirit:range>
-        <spirit:width spirit:format="long" spirit:resolve="user">16</spirit:width>
-        <spirit:usage>register</spirit:usage>
+        <spirit:name>DmiDebugMem</spirit:name>
+        <spirit:baseAddress spirit:format="long">0</spirit:baseAddress>
+        <spirit:range spirit:format="long">4096</spirit:range>
+        <spirit:width spirit:format="long">16</spirit:width>
+        <spirit:usage>memory</spirit:usage>
       </spirit:addressBlock>
     </spirit:memoryMap>
   </spirit:memoryMaps>
@@ -506,7 +506,7 @@
         <spirit:parameters>
           <spirit:parameter>
             <spirit:name>viewChecksum</spirit:name>
-            <spirit:value>f931642c</spirit:value>
+            <spirit:value>14531295</spirit:value>
           </spirit:parameter>
         </spirit:parameters>
       </spirit:view>
@@ -522,7 +522,7 @@
         <spirit:parameters>
           <spirit:parameter>
             <spirit:name>viewChecksum</spirit:name>
-            <spirit:value>f931642c</spirit:value>
+            <spirit:value>14531295</spirit:value>
           </spirit:parameter>
         </spirit:parameters>
       </spirit:view>
@@ -1478,7 +1478,7 @@
       <spirit:file>
         <spirit:name>src/mkAXI_to_Dmi.v</spirit:name>
         <spirit:fileType>verilogSource</spirit:fileType>
-        <spirit:userFileType>CHECKSUM_83941720</spirit:userFileType>
+        <spirit:userFileType>CHECKSUM_20fd8fe6</spirit:userFileType>
       </spirit:file>
     </spirit:fileSet>
     <spirit:fileSet>
@@ -1539,16 +1539,16 @@
       <xilinx:displayName>AXI_to_Dmi</xilinx:displayName>
       <xilinx:definitionSource>package_project</xilinx:definitionSource>
       <xilinx:coreRevision>1</xilinx:coreRevision>
-      <xilinx:coreCreationDateTime>2020-09-16T09:48:27Z</xilinx:coreCreationDateTime>
+      <xilinx:coreCreationDateTime>2020-10-01T08:42:01Z</xilinx:coreCreationDateTime>
       <xilinx:tags>
         <xilinx:tag xilinx:name="nopcore"/>
       </xilinx:tags>
     </xilinx:coreExtensions>
     <xilinx:packagingInfo>
       <xilinx:xilinxVersion>2019.1</xilinx:xilinxVersion>
-      <xilinx:checksum xilinx:scope="busInterfaces" xilinx:value="8d0c5cf8"/>
-      <xilinx:checksum xilinx:scope="memoryMaps" xilinx:value="e64c66bd"/>
-      <xilinx:checksum xilinx:scope="fileGroups" xilinx:value="5a216d6b"/>
+      <xilinx:checksum xilinx:scope="busInterfaces" xilinx:value="a9ec4e7b"/>
+      <xilinx:checksum xilinx:scope="memoryMaps" xilinx:value="89a93be4"/>
+      <xilinx:checksum xilinx:scope="fileGroups" xilinx:value="f1a38922"/>
       <xilinx:checksum xilinx:scope="ports" xilinx:value="d9b3afd6"/>
       <xilinx:checksum xilinx:scope="parameters" xilinx:value="dcac28c7"/>
     </xilinx:packagingInfo>

@@ -66,5 +66,4 @@ dict set stdcomps   axi_to_jtag          vlnv   "esa.informatik.tu-darmstadt.de:
 dict set stdcomps   axi_to_dmi           vlnv   "esa.informatik.tu-darmstadt.de:user:AXI_to_Dmi:1.0"
 dict set stdcomps   jtag_switch          vlnv   "esa.informatik.tu-darmstadt.de:user:JTAG_switch:1.0"
 dict set stdcomps   jtag_chain           vlnv   "esa.informatik.tu-darmstadt.de:user:JTAG_chain:1.0"
-dict set stdcomps   jtag_chain           vlnv   "esa.informatik.tu-darmstadt.de:user:JTAG_chain:1.0"
 dict set stdcomps   dmi                  vlnv   "esa.informatik.tu-darmstadt.de:user:DMI_rtl:1.0"

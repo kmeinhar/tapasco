@@ -5,6 +5,7 @@ proc init_gui { IPINST } {
   set Page_0 [ipgui::add_page $IPINST -name "Page 0"]
   ipgui::add_param $IPINST -name "jtag_device_type" -parent ${Page_0}
   ipgui::add_param $IPINST -name "jtag_master" -parent ${Page_0}
+  ipgui::add_param $IPINST -name "rtck_type" -parent ${Page_0}
 
 
 }
@@ -27,6 +28,15 @@ proc validate_PARAM_VALUE.jtag_master { PARAM_VALUE.jtag_master } {
 	return true
 }
 
+proc update_PARAM_VALUE.rtck_type { PARAM_VALUE.rtck_type } {
+	# Procedure called to update rtck_type when any of the dependent parameters in the arguments change
+}
+
+proc validate_PARAM_VALUE.rtck_type { PARAM_VALUE.rtck_type } {
+	# Procedure called to validate rtck_type
+	return true
+}
+
 
 proc update_MODELPARAM_VALUE.jtag_device_type { MODELPARAM_VALUE.jtag_device_type PARAM_VALUE.jtag_device_type } {
 	# Procedure called to set VHDL generic/Verilog parameter value(s) based on TCL parameter value
@@ -36,5 +46,10 @@ proc update_MODELPARAM_VALUE.jtag_device_type { MODELPARAM_VALUE.jtag_device_typ
 proc update_MODELPARAM_VALUE.jtag_master { MODELPARAM_VALUE.jtag_master PARAM_VALUE.jtag_master } {
 	# Procedure called to set VHDL generic/Verilog parameter value(s) based on TCL parameter value
 	set_property value [get_property value ${PARAM_VALUE.jtag_master}] ${MODELPARAM_VALUE.jtag_master}
+}
+
+proc update_MODELPARAM_VALUE.rtck_type { MODELPARAM_VALUE.rtck_type PARAM_VALUE.rtck_type } {
+	# Procedure called to set VHDL generic/Verilog parameter value(s) based on TCL parameter value
+	set_property value [get_property value ${PARAM_VALUE.rtck_type}] ${MODELPARAM_VALUE.rtck_type}
 }
 
