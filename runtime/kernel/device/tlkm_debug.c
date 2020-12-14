@@ -37,7 +37,8 @@ static void *mapped_address;
 
 inline static tlkm_component_t get_debug_component (struct tlkm_device* inst)
 {
-    tlkm_component_t empty_comp = {"", 0, 0};
+    // TODO this is fixed for one bitstream on the pynq
+    tlkm_component_t empty_comp = {"", 0x40010000, 0x1000};
     int i;
     for (i = 0; i < TLKM_COMPONENT_MAX; i += 1) {
         int cmp = strncmp("PLATFORM_COMPONENT_DEBUG", inst->components[i].name,
@@ -97,7 +98,7 @@ int tlkm_debug_mmap(struct file *fp, struct vm_area_struct *vm)
     tlkm_component_t debug_comp = get_debug_component(dp);
     ssize_t const sz = vm->vm_end - vm->vm_start;
     ulong const off = vm->vm_pgoff << PAGE_SHIFT;
-    ulong kptr = addr2map_off(dp, off);
+    ulong kptr = (ulong) addr2map_off(dp, off);
     DEVLOG(dp->dev_id, TLKM_LF_DEBUG, "received mmap: offset = 0x%08lx", off);
     if (kptr == -1) {
         DEVERR(dp->dev_id, "invalid address: 0x%08lx", off);
@@ -105,11 +106,12 @@ int tlkm_debug_mmap(struct file *fp, struct vm_area_struct *vm)
     }
 
     DEVLOG(dp->dev_id, TLKM_LF_DEBUG,
-           "mapping %zu bytes from physical address 0x%lx to user space 0x%lx-0x%lx",
-           sz, dp->base_offset + kptr + debug_comp.offset, vm->vm_start, vm->vm_end);
+            "mapping %zu bytes from physical address 0x%lx to user space 0x%lx-0x%lx",
+            sz, /*dp->base_offset + kptr +*/ debug_comp.offset, vm->vm_start, vm->vm_end);
+
     vm->vm_page_prot = pgprot_noncached(vm->vm_page_prot);
     if (io_remap_pfn_range(vm, vm->vm_start,
-            (dp->base_offset + kptr + debug_comp.offset) >> PAGE_SHIFT, sz,
+            (/*dp->base_offset + kptr +*/ debug_comp.offset) >> PAGE_SHIFT, sz,
             vm->vm_page_prot)) {
         DEVWRN(dp->dev_id, "io_remap_pfn_range failed!");
         return -EAGAIN;

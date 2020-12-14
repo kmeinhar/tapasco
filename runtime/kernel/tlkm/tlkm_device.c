@@ -123,7 +123,6 @@ int tlkm_device_init(struct tlkm_device *dev, void *data)
 	return ret;
 
 err_debug:
-err_dma:
 err_interrupts:
 	if (dev->cls->exit_subsystems)
 		dev->cls->exit_subsystems(dev);
