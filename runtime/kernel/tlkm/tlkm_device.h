@@ -55,6 +55,7 @@ struct tlkm_device {
 #ifndef NPERFC
 	struct miscdevice perfc_dev; /* performance counter device */
 #endif
+	struct miscdevice debug_dev; /* debug device */
 	void *private_data; /* implementation-specific data */
 };
 

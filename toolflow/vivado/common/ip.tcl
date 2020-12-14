@@ -554,6 +554,7 @@ namespace eval ::tapasco::ip {
             incr slot_id
           }
           "master" {}
+          "invisible" {}
           default { error "invalid kind: [dict get $addr $intf kind]" }
         }
       }

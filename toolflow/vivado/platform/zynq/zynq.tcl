@@ -58,6 +58,7 @@ namespace eval ::platform {
       switch -glob [get_property NAME $m] {
         "M_TAPASCO" { foreach {base stride range comp} [list 0x80000000 0       0 "PLATFORM_COMPONENT_STATUS"] {} }
         "M_INTC"    { foreach {base stride range comp} [list 0x80010000 0x10000 0 "PLATFORM_COMPONENT_INTC0"] {} }
+        "M_DEBUG"    { foreach {base stride range comp} [list 0x83C00000 0      0 "PLATFORM_COMPONENT_DEBUG"] {} }
         "M_ARCH"    { set base "skip" }
         default     { if { [dict exists $extra_masters [get_property NAME $m]] } {
                           set l [dict get $extra_masters [get_property NAME $m]]
@@ -293,6 +294,9 @@ namespace eval ::platform {
       lappend gp1_masters [create_bd_intf_pin -mode Master -vlnv $aximm_vlnv [format "M_%s" [string toupper $ss]]]
     }
     lappend gp1_masters [create_bd_intf_pin -mode Master -vlnv $aximm_vlnv "M_TAPASCO"]
+    if {[tapasco::is_feature_enabled "PlatformJtagDebug"]} {
+        lappend gp1_masters [create_bd_intf_pin -mode Master -vlnv $aximm_vlnv "M_DEBUG"]
+    }
 
     set gp0_ic_tree [::tapasco::create_interconnect_tree "gp0_ic_tree" [llength $gp0_masters] false]
     set gp1_ic_tree [::tapasco::create_interconnect_tree "gp1_ic_tree" [llength $gp1_masters] false]

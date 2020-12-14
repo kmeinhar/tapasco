@@ -18,6 +18,7 @@
  * along with this program. If not, see <http:///www.gnu.org/licenses/>.
  */
 
+use crate::jtagdebug::JTAGDebug;
 use crate::debug::DebugGenerator;
 use crate::device::Error as DevError;
 use crate::device::{Device, DeviceAddress};
@@ -518,5 +519,15 @@ impl TLKM {
         trace!("Devices are {:?}.", v);
 
         Ok(v)
+    }
+
+    pub fn tapasco_tlkm_debug_alloc(&self) -> Result<JTAGDebug> {
+        trace!("Allocating JTAG debug device");
+        let debug = JTAGDebug::new();
+        trace!("Successfully allocated debug device");
+        return match debug {
+            Ok(debug) => Ok(debug),
+            Err(err) => panic!("Problem opening the debug file: {:?}", err),
+        };
     }
 }

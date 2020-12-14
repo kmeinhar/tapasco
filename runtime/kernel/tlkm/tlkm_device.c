@@ -24,6 +24,7 @@
 #include "tlkm_control.h"
 #include "tlkm_class.h"
 #include "tlkm_perfc_miscdev.h"
+#include "tlkm_debug.h"
 
 #define TLKM_STATUS_SZ 0x1000
 #define TLKM_STATUS_REG_OFFSET 0x1000
@@ -31,7 +32,7 @@
 int tlkm_device_init(struct tlkm_device *dev, void *data)
 {
 	int ret = 0;
-	DEVLOG(dev->dev_id, TLKM_LF_DEVICE,
+    DEVLOG(dev->dev_id, TLKM_LF_DEVICE,
 	       "setup performance counter file ...");
 	if ((ret = tlkm_perfc_miscdev_init(dev))) {
 		DEVERR(dev->dev_id,
@@ -108,9 +109,20 @@ int tlkm_device_init(struct tlkm_device *dev, void *data)
 		}
 	}
 
+	DEVLOG(dev->dev_id, TLKM_LF_DEVICE,
+	       "setup debug file ...");
+	if ((ret = tlkm_debug_init(dev))) {
+		DEVERR(dev->dev_id,
+		       "could not setup debug device file: %d",
+		       ret);
+		goto err_debug;
+	}
+
+
 	DEVLOG(dev->dev_id, TLKM_LF_DEVICE, "device setup complete");
 	return ret;
 
+err_debug:
 err_interrupts:
 	if (dev->cls->exit_subsystems)
 		dev->cls->exit_subsystems(dev);
@@ -143,6 +155,7 @@ void tlkm_device_exit(struct tlkm_device *dev)
 		tlkm_platform_mmap_exit(dev, &dev->mmap);
 		tlkm_control_exit(dev->ctrl);
 		tlkm_perfc_miscdev_exit(dev);
+		tlkm_debug_exit(dev);
 		DEVLOG(dev->dev_id, TLKM_LF_DEVICE, "destroyed");
 	}
 }

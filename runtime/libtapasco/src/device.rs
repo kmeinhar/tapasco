@@ -217,6 +217,7 @@ pub struct Device {
     name: String,
     access: tlkm_access,
     scheduler: Arc<Scheduler>,
+    debug: MmapMut,
     platform: Arc<MmapMut>,
     arch: Arc<MmapMut>,
     offchip_memory: Vec<Arc<OffchipMemory>>,
@@ -416,6 +417,24 @@ impl Device {
             .context(SchedulerError)?,
         );
 
+        trace!("Mapping RV debug area.");
+        let tlkm_debug_file = Arc::new(
+            OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(format!("/dev/tlkm_debug_{:02}", id))
+                .context(DeviceUnavailable { id: id })?,
+        );
+
+        let debug = unsafe {
+            MmapOptions::new()
+                .len(20)
+                .offset(0)
+                .map_mut(&tlkm_debug_file)
+                .context(DeviceUnavailable { id: id })?
+        };
+        trace!("Mapped RV debug area: {}", debug[0]);
+
         trace!("Device creation completed.");
         let mut device = Device {
             id: id,
@@ -426,6 +445,7 @@ impl Device {
             status: s,
             scheduler: scheduler,
             platform: platform,
+            debug: debug,
             arch: arch,
             offchip_memory: allocator,
             tlkm_file: tlkm_file,
@@ -533,6 +553,22 @@ impl Device {
             })
             .frequency_mhz;
         Ok(freq as f32)
+    }
+
+    pub fn debug_offset(&self) -> Result<i32> {
+        let freq = self
+            .status
+            .platform
+            .iter()
+            .find(|&x| x.name == "PLATFORM_COMPONENT_DEBUG")
+            .unwrap_or(&status::Platform {
+                name: "".to_string(),
+                offset: 0,
+                size: 0,
+                interrupts: [].to_vec(),
+            })
+            .offset;
+        Ok(freq as i32)
     }
 
     /// Return frequency in MHz used by the memory as indicated by the status core.

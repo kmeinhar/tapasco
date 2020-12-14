@@ -376,10 +376,75 @@ public:
     return tapasco_device_design_frequency(this->device);
   }
 
+  int debug_offset() {
+    return tapasco_device_debug_offset(this->device);
+  }
+
   Device *get_device() { return this->device; }
 
 private:
   Device *device{0};
+};
+
+class TapascoDebug {
+public:
+  TapascoDebug(TLKM *tlkm) {
+    this->debug = tapasco_tlkm_debug_alloc(tlkm);
+    if (this->debug == 0) {
+      handle_error();
+    }
+  }
+
+  virtual ~TapascoDebug() {
+    if (this->debug != 0) {
+        this->debug = 0;
+    }
+  }
+
+  uint32_t read_dtm(uint32_t reg_addr) {
+    return tapasco_debug_read_dtm_reg(this->debug, reg_addr);
+  }
+  void write_dtm(uint32_t reg_addr, uint32_t data) {
+    return tapasco_debug_write_dtm_reg(this->debug, reg_addr, data);
+  }
+
+  uint32_t read_dm_reg(uint32_t reg_addr) {
+    return tapasco_debug_read_dm_reg(this->debug, reg_addr);
+  }
+
+  void write_dm_reg(uint32_t reg_addr, uint32_t data) {
+    tapasco_debug_write_dm_reg(this->debug, reg_addr, data);
+  }
+
+  void activate_dm() {
+    tapasco_debug_activate_dm(this->debug);
+  }
+
+  void halt_core() {
+    tapasco_debug_halt_core(this->debug);
+  }
+
+  void resume_core() {
+    tapasco_debug_resume_core(this->debug);
+  }
+
+  bool is_core_halted() {
+    return tapasco_debug_is_core_halted(this->debug);
+  }
+
+  uint32_t abstract_register_read(uint32_t reg_addr) {
+    return tapasco_debug_abstract_register_read(this->debug, reg_addr);
+  }
+
+  uint32_t abstract_memory_read(uint32_t reg_addr) {
+    return tapasco_debug_abstract_memory_read(this->debug, reg_addr);
+  }
+
+  void abstract_memory_write(uint32_t reg_addr, uint32_t data) {
+    return tapasco_debug_abstract_memory_write(this->debug, reg_addr, data);
+  }
+private:
+  JTAGDebug *debug;
 };
 
 class TapascoDriver {
@@ -428,6 +493,10 @@ public:
       handle_error();
     }
     return num_devices;
+  }
+
+  TapascoDebug allocate_jtag_debug () {
+    return TapascoDebug(this->tlkm);
   }
 
 private:
@@ -600,6 +669,12 @@ struct Tapasco {
   }
 
   float design_frequency() { return this->device_internal.design_frequency(); }
+
+  int debug_offset() { return this->device_internal.debug_offset(); }
+
+  TapascoDebug allocate_jtag_debug() {
+    return this->driver_internal.allocate_jtag_debug();
+  }
 
   std::string version() {
     uintptr_t len = tapasco_version_len();

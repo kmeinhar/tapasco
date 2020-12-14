@@ -10,6 +10,7 @@ tlkm-objs := \
     tlkm/tlkm_platform.o \
     device/tlkm_perfc.o \
     device/tlkm_perfc_miscdev.o \
+    device/tlkm_debug.o \
     device/tlkm_control.o \
     device/tlkm_device_ioctl.o \
     device/tlkm_device_mmap.o \
