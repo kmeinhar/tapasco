@@ -21,6 +21,7 @@
 use crate::allocator::{Allocator, DriverAllocator, GenericAllocator};
 use crate::debug::DebugGenerator;
 use crate::dma::{DMAControl, DirectDMA, DriverDMA};
+use crate::dma_user_space::UserSpaceDMA;
 use crate::job::Job;
 use crate::pe::PEId;
 use crate::scheduler::Scheduler;
@@ -29,6 +30,7 @@ use crate::tlkm::tlkm_ioctl_create;
 use crate::tlkm::tlkm_ioctl_destroy;
 use crate::tlkm::tlkm_ioctl_device_cmd;
 use crate::tlkm::DeviceId;
+use config::Config;
 use memmap::MmapMut;
 use memmap::MmapOptions;
 use prost::Message;
@@ -75,11 +77,17 @@ pub enum Error {
     #[snafu(display("PE acquisition requires Exclusive Access mode."))]
     ExclusiveRequired {},
 
+    #[snafu(display("Could not find any DMA engines."))]
+    DMAEngineMissing {},
+
     #[snafu(display("Could not destroy device {}: {}", id, source))]
     IOCTLDestroy { source: nix::Error, id: DeviceId },
 
     #[snafu(display("Scheduler Error: {}", source))]
     SchedulerError { source: crate::scheduler::Error },
+
+    #[snafu(display("DMA Error: {}", source))]
+    DMAError { source: crate::dma::Error },
 
     #[snafu(display("Allocator Error: {}", source))]
     AllocatorError { source: crate::allocator::Error },
@@ -89,6 +97,9 @@ pub enum Error {
 
     #[snafu(display("Unknown device type {}.", name))]
     DeviceType { name: String },
+
+    #[snafu(display("Could not parse configuration {}", source))]
+    ConfigError { source: config::ConfigError },
 }
 type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -206,12 +217,13 @@ pub struct Device {
     name: String,
     access: tlkm_access,
     scheduler: Arc<Scheduler>,
-    platform: MmapMut,
     debug: MmapMut,
+    platform: Arc<MmapMut>,
     arch: Arc<MmapMut>,
     offchip_memory: Vec<Arc<OffchipMemory>>,
     tlkm_file: Arc<File>,
     tlkm_device_file: Arc<File>,
+    settings: Arc<Config>,
 }
 
 impl Device {
@@ -228,6 +240,7 @@ impl Device {
         vendor: u32,
         product: u32,
         name: String,
+        settings: Arc<Config>,
         debug_impls: &HashMap<String, Box<dyn DebugGenerator + Sync + Send>>,
     ) -> Result<Device> {
         trace!("Open driver device file.");
@@ -236,7 +249,13 @@ impl Device {
             OpenOptions::new()
                 .read(true)
                 .write(true)
-                .open(format!("/dev/tlkm_{:02}", id))
+                .open(format!(
+                    "{}{:02}",
+                    settings
+                        .get_str("tlkm.device_driver_file")
+                        .context(ConfigError)?,
+                    id
+                ))
                 .context(DeviceUnavailable { id: id })?,
         );
 
@@ -265,32 +284,6 @@ impl Device {
 
         trace!("Status core decoded: {:?}", s);
 
-        // Initialize the global memories.
-        // Currently falls back to PCIe and Zynq allocation using the default 4GB at 0x0.
-        // This will be replaced with proper dynamic initialization after the status core
-        // has been updated to contain the required information.
-        info!("Using static memory allocation due to lack of dynamic data in the status core.");
-        let mut allocator = Vec::new();
-        if name == "pcie" {
-            info!("Allocating the default of 4GB at 0x0 for a PCIe platform");
-            allocator.push(Arc::new(OffchipMemory {
-                allocator: Mutex::new(Box::new(
-                    GenericAllocator::new(0, 4 * 1024 * 1024 * 1024, 64).context(AllocatorError)?,
-                )),
-                dma: Box::new(DriverDMA::new(&tlkm_dma_file)),
-            }));
-        } else if name == "zynq" || name == "zynqmp" {
-            info!("Using driver allocation for Zynq/ZynqMP based platform.");
-            allocator.push(Arc::new(OffchipMemory {
-                allocator: Mutex::new(Box::new(
-                    DriverAllocator::new(&tlkm_dma_file).context(AllocatorError)?,
-                )),
-                dma: Box::new(DriverDMA::new(&tlkm_dma_file)),
-            }));
-        } else {
-            return Err(Error::DeviceType { name: name });
-        }
-
         trace!("Mapping the platform and architecture memory regions.");
 
         let platform_size = match &s.platform_base {
@@ -300,13 +293,13 @@ impl Device {
             }),
         }?;
 
-        let platform = unsafe {
+        let platform = Arc::new(unsafe {
             MmapOptions::new()
                 .len(platform_size as usize)
                 .offset(8192)
                 .map_mut(&tlkm_dma_file)
                 .context(DeviceUnavailable { id: id })?
-        };
+        });
 
         let arch_size = match &s.arch_base {
             Some(base) => Ok(base.size),
@@ -319,15 +312,81 @@ impl Device {
             MmapOptions::new()
                 .len(arch_size as usize)
                 .offset(4096)
-                .map_mut(
-                    &OpenOptions::new()
-                        .read(true)
-                        .write(true)
-                        .open(format!("/dev/tlkm_{:02}", id))
-                        .context(DeviceUnavailable { id: id })?,
-                )
+                .map_mut(&tlkm_dma_file)
                 .context(DeviceUnavailable { id: id })?
         });
+
+        // Initialize the global memories.
+        // Currently falls back to PCIe and Zynq allocation using the default 4GB at 0x0.
+        // This will be replaced with proper dynamic initialization after the status core
+        // has been updated to contain the required information.
+        info!("Using static memory allocation due to lack of dynamic data in the status core.");
+        let mut allocator = Vec::new();
+        let mut is_pcie = false;
+        if name == "pcie" {
+            info!("Allocating the default of 4GB at 0x0 for a PCIe platform");
+            let mut dma_offset = 0;
+            let mut dma_interrupt_read = 0;
+            let mut dma_interrupt_write = 1;
+            for comp in &s.platform {
+                if comp.name == "PLATFORM_COMPONENT_DMA0" {
+                    dma_offset = comp.offset;
+                    for v in &comp.interrupts {
+                        if v.name == "READ" {
+                            dma_interrupt_read = v.mapping as usize;
+                        } else if v.name == "WRITE" {
+                            dma_interrupt_write = v.mapping as usize;
+                        } else {
+                            trace!("Unknown DMA interrupt: {}.", v.name);
+                        }
+                    }
+                }
+            }
+            if dma_offset == 0 {
+                trace!("Could not find DMA engine.");
+                return Err(Error::DMAEngineMissing {});
+            }
+
+            is_pcie = true;
+
+            allocator.push(Arc::new(OffchipMemory {
+                allocator: Mutex::new(Box::new(
+                    GenericAllocator::new(0, 4 * 1024 * 1024 * 1024, 64).context(AllocatorError)?,
+                )),
+                dma: Box::new(
+                    UserSpaceDMA::new(
+                        &tlkm_dma_file,
+                        dma_offset as usize,
+                        dma_interrupt_read,
+                        dma_interrupt_write,
+                        &platform,
+                        settings
+                            .get::<usize>("dma.read_buffer_size")
+                            .context(ConfigError)?,
+                        settings
+                            .get::<usize>("dma.read_buffers")
+                            .context(ConfigError)?,
+                        settings
+                            .get::<usize>("dma.write_buffer_size")
+                            .context(ConfigError)?,
+                        settings
+                            .get::<usize>("dma.write_buffers")
+                            .context(ConfigError)?,
+                    )
+                    .context(DMAError)?,
+                ),
+            }));
+        } else if name == "zynq" || name == "zynqmp" {
+            info!("Using driver allocation for Zynq/ZynqMP based platform.");
+            allocator.push(Arc::new(OffchipMemory {
+                allocator: Mutex::new(Box::new(
+                    DriverAllocator::new(&tlkm_dma_file).context(AllocatorError)?,
+                )),
+                dma: Box::new(DriverDMA::new(&tlkm_dma_file)),
+            }));
+        } else {
+            return Err(Error::DeviceType { name: name });
+        }
 
         trace!("Initialize PE local memories.");
         let mut pe_local_memories = VecDeque::new();
@@ -353,6 +412,7 @@ impl Device {
                 pe_local_memories,
                 &tlkm_dma_file,
                 &debug_impls,
+                is_pcie,
             )
             .context(SchedulerError)?,
         );
@@ -390,6 +450,7 @@ impl Device {
             offchip_memory: allocator,
             tlkm_file: tlkm_file,
             tlkm_device_file: tlkm_dma_file,
+            settings: settings,
         };
 
         device.change_access(tlkm_access::TlkmAccessMonitor)?;
@@ -549,5 +610,10 @@ impl Device {
     /// Return the number of PEs of a given ID in the bitstream.
     pub fn num_pes(&self, pe: PEId) -> usize {
         self.scheduler.num_pes(pe)
+    }
+
+    /// Return the PEId of the PE with the given name
+    pub fn get_pe_id(&self, name: &str) -> Result<PEId> {
+        self.scheduler.get_pe_id(name).context(SchedulerError)
     }
 }

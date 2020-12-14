@@ -18,6 +18,17 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*
+  Interface changes since Tapasco 2020.4:
+
+    * `RetVal` now takes a pointer parameter instead of a reference.
+    * All other wrappers use move constructors instead of references, e.g. `T
+  &&t` instead of `T &t`.
+    * `make` functions can be chained, e.g. makeInOnly(makeLocal(v));
+    * `tapasco_info_t` is no longer available. Instead dedicated functions, e.g.
+  `tapasco::design_frequency` can be used to retrieve the desired information.
+*/
+
 #ifndef TAPASCO_HPP__
 #define TAPASCO_HPP__
 
@@ -336,6 +347,14 @@ public:
     return cnt;
   }
 
+  PEId get_pe_id(std::string name) {
+    PEId peid = tapasco_device_get_pe_id(this->device, name.c_str());
+    if (peid == (PEId)-1) {
+      tapasco::handle_error();
+    }
+    return peid;
+  }
+
   TapascoMemory default_memory() {
     TapascoOffchipMemory *mem = tapasco_get_default_memory(this->device);
     if (mem == 0) {
@@ -636,6 +655,17 @@ struct Tapasco {
   int kernel_pe_count(PEId k_id) {
     int64_t cnt = this->device_internal.num_pes(k_id);
     return cnt;
+  }
+
+  /**
+   * Returns the ID of the kernel with the given name.
+   *
+   * @param name Name of the kernel
+   * @return number of the PE if available or an exception if PE type is not
+   * available.
+   **/
+  int get_pe_id(std::string name) {
+    return this->device_internal.get_pe_id(name);
   }
 
   float design_frequency() { return this->device_internal.design_frequency(); }

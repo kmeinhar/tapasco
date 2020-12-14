@@ -2,7 +2,7 @@
  * Copyright (c) 2014-2020 Embedded Systems and Applications, TU Darmstadt.
  *
  * This file is part of TaPaSCo
- * (see https:///github.com/esa-tu-darmstadt/tapasco).
+ * (see https://github.com/esa-tu-darmstadt/tapasco).
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -22,6 +22,7 @@ use crate::jtagdebug::JTAGDebug;
 use crate::debug::DebugGenerator;
 use crate::device::Error as DevError;
 use crate::device::{Device, DeviceAddress};
+use config::Config;
 use libc::c_char;
 use snafu::ResultExt;
 use std::collections::HashMap;
@@ -55,6 +56,9 @@ pub enum Error {
 
     #[snafu(display("Could not find device {}", id))]
     DeviceNotFound { id: DeviceId },
+
+    #[snafu(display("Could not parse configuration {}", source))]
+    ConfigError { source: config::ConfigError },
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -128,8 +132,7 @@ ioctl_readwrite!(
     tlkm_copy_cmd_from
 );
 
-const TLKM_DEVICE_IOCTL_REGISTER_PLATFORM_INTERRUPT: u8 = 0x14;
-const TLKM_DEVICE_IOCTL_REGISTER_USER_INTERRUPT: u8 = 0x15;
+const TLKM_DEVICE_IOCTL_REGISTER_INTERRUPT: u8 = 0x14;
 
 #[repr(C)]
 pub struct tlkm_register_interrupt {
@@ -138,16 +141,9 @@ pub struct tlkm_register_interrupt {
 }
 
 ioctl_readwrite!(
-    tlkm_ioctl_reg_platform,
+    tlkm_ioctl_reg_interrupt,
     TLKM_DEVICE_IOC_MAGIC,
-    TLKM_DEVICE_IOCTL_REGISTER_PLATFORM_INTERRUPT,
-    tlkm_register_interrupt
-);
-
-ioctl_readwrite!(
-    tlkm_ioctl_reg_user,
-    TLKM_DEVICE_IOC_MAGIC,
-    TLKM_DEVICE_IOCTL_REGISTER_USER_INTERRUPT,
+    TLKM_DEVICE_IOCTL_REGISTER_INTERRUPT,
     tlkm_register_interrupt
 );
 
@@ -228,6 +224,56 @@ ioctl_readwrite!(
     TLKM_IOCTL_DESTROY_DEVICE,
     tlkm_ioctl_device_cmd
 );
+
+// User space DMA
+#[repr(C)]
+#[derive(Debug, PartialEq)]
+pub struct tlkm_dma_buffer_allocate {
+    pub size: usize,
+    pub from_device: bool,
+    pub buffer_id: usize,
+    pub addr: u64,
+}
+
+#[repr(C)]
+#[derive(Debug, PartialEq)]
+pub struct tlkm_dma_buffer_op {
+    pub buffer_id: usize,
+}
+
+const TLKM_IOCTL_DMA_BUFFER_ALLOCATE: u8 = 0x40;
+const TLKM_IOCTL_DMA_BUFFER_FREE: u8 = 0x41;
+const TLKM_IOCTL_DMA_BUFFER_TO_DEV: u8 = 0x42;
+const TLKM_IOCTL_DMA_BUFFER_FROM_DEV: u8 = 0x43;
+
+ioctl_readwrite!(
+    tlkm_ioctl_dma_buffer_allocate,
+    TLKM_DEVICE_IOC_MAGIC,
+    TLKM_IOCTL_DMA_BUFFER_ALLOCATE,
+    tlkm_dma_buffer_allocate
+);
+
+ioctl_readwrite!(
+    tlkm_ioctl_dma_buffer_free,
+    TLKM_DEVICE_IOC_MAGIC,
+    TLKM_IOCTL_DMA_BUFFER_FREE,
+    tlkm_dma_buffer_op
+);
+
+ioctl_readwrite!(
+    tlkm_ioctl_dma_buffer_to_dev,
+    TLKM_DEVICE_IOC_MAGIC,
+    TLKM_IOCTL_DMA_BUFFER_TO_DEV,
+    tlkm_dma_buffer_op
+);
+
+ioctl_readwrite!(
+    tlkm_ioctl_dma_buffer_from_dev,
+    TLKM_DEVICE_IOC_MAGIC,
+    TLKM_IOCTL_DMA_BUFFER_FROM_DEV,
+    tlkm_dma_buffer_op
+);
+
 // End of IOCTL definitions.
 
 /// TLKM IOCTL convenience access
@@ -239,6 +285,7 @@ ioctl_readwrite!(
 
 pub struct TLKM {
     file: Arc<File>,
+    settings: Arc<Config>,
 }
 
 /// Helper structure for device information
@@ -264,15 +311,42 @@ impl Drop for TLKM {
 impl TLKM {
     /// Open the driver chardev.
     pub fn new() -> Result<TLKM> {
-        let path = PathBuf::from(r"/dev/tlkm");
+        let default_config = include_str!("../config/default.toml");
+        let mut settings = Config::default();
+
+        settings
+            .merge(config::File::from_str(
+                default_config,
+                config::FileFormat::Toml,
+            ))
+            .context(ConfigError)?;
+
+        settings
+            .merge(config::File::with_name("/etc/tapasco/TapascoConfig").required(false))
+            .context(ConfigError)?;
+        settings
+            .merge(config::File::with_name("TapascoConfig").required(false))
+            .context(ConfigError)?;
+        settings
+            .merge(config::Environment::with_prefix("tapasco").separator("__"))
+            .context(ConfigError)?;
+
+        trace!("Using config: {:?}", settings);
+
+        let path = PathBuf::from(
+            settings
+                .get_str("tlkm.main_driver_file")
+                .context(ConfigError)?,
+        );
         let file = OpenOptions::new()
             .read(true)
             .write(true)
-            .open("/dev/tlkm")
+            .open(&path)
             .context(DriverOpen { filename: path })?;
 
         Ok(TLKM {
             file: Arc::new(file),
+            settings: Arc::new(settings),
         })
     }
 
@@ -390,6 +464,7 @@ impl TLKM {
                     String::from_utf8_lossy(&devices.devs[x].name)
                         .trim_matches(char::from(0))
                         .to_string(),
+                    self.settings.clone(),
                     debug_impls,
                 )
                 .context(DeviceError)?);
@@ -434,6 +509,7 @@ impl TLKM {
                     String::from_utf8_lossy(&devices.devs[x].name)
                         .trim_matches(char::from(0))
                         .to_string(),
+                    self.settings.clone(),
                     debug_impls,
                 )
                 .context(DeviceError)?,

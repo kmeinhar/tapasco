@@ -32,12 +32,16 @@ use std::os::unix::prelude::*;
 use std::sync::Arc;
 
 #[derive(Debug, Snafu)]
+#[snafu(visibility(pub))]
 pub enum Error {
     #[snafu(display("Could not transfer to device {}", source))]
     DMAToDevice { source: nix::Error },
 
     #[snafu(display("Could not transfer from device {}", source))]
     DMAFromDevice { source: nix::Error },
+
+    #[snafu(display("Could not allocate DMA buffer {}", source))]
+    DMABufferAllocate { source: nix::Error },
 
     #[snafu(display(
         "Transfer 0x{:x} - 0x{:x} outside of memory region 0x{:x}.",
@@ -51,11 +55,28 @@ pub enum Error {
         size: DeviceSize,
     },
 
+    #[snafu(display("Mutex has been poisoned"))]
+    MutexError {},
+
     #[snafu(display("Failed flushing the memory for DirectDMA: {}", source))]
     FailedFlush { source: std::io::Error },
+
+    #[snafu(display("Failed to mmap DMA buffer: {}", source))]
+    FailedMMapDMA { source: std::io::Error },
+
+    #[snafu(display("Error during interrupt handling: {}", source))]
+    ErrorInterrupt { source: crate::interrupt::Error },
+
+    #[snafu(display(
+        "Got interrupt but outstanding buffers are empty. This should never happen."
+    ))]
+    TooManyInterrupts {},
 }
 type Result<T, E = Error> = std::result::Result<T, E>;
 
+/// Specifies a method to interact with DMA methods
+///
+/// The methods will block and the transfer is assumed complete when they return.
 pub trait DMAControl: Debug {
     fn copy_to(&self, data: &[u8], ptr: DeviceAddress) -> Result<()>;
     fn copy_from(&self, ptr: DeviceAddress, data: &mut [u8]) -> Result<()>;
@@ -74,6 +95,9 @@ impl DriverDMA {
     }
 }
 
+/// Use TLKM IOCTLs to transfer data
+///
+/// Is currently used for Zynq based devices.
 impl DMAControl for DriverDMA {
     fn copy_to(&self, data: &[u8], ptr: DeviceAddress) -> Result<()> {
         trace!(
@@ -118,6 +142,11 @@ impl DMAControl for DriverDMA {
     }
 }
 
+/// Use the CPU to transfer data
+///
+/// Can be used for all memory that is directly accessible by the host.
+/// This might be BAR mapped device off-chip-memory or PE local memory.
+/// The latter is the main use case for this kind of transfer.
 #[derive(Debug, Getters)]
 pub struct DirectDMA {
     offset: DeviceAddress,

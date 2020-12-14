@@ -15,16 +15,20 @@ use average::{concatenate, Estimate, Max, MeanWithError, Min};
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use crossbeam::thread;
 use indicatif::{HumanBytes, ProgressBar, ProgressStyle};
+use itertools::Itertools;
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use snafu::{ErrorCompat, ResultExt, Snafu};
 use std::collections::HashMap;
+use std::env;
 use std::io;
 use std::io::Write;
+use std::iter;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tapasco::device::OffchipMemory;
 use tapasco::tlkm::*;
 use uom::si::f32::*;
-use uom::si::frequency::megahertz;
 use uom::si::time::microsecond;
 use uom::si::time::nanosecond;
 
@@ -117,7 +121,11 @@ fn run_arrayinit(_: &ArgMatches) -> Result<()> {
     for mut x in devices {
         x.change_access(tapasco::tlkm::tlkm_access::TlkmAccessExclusive)
             .context(DeviceInit {})?;
-        let mut pe = x.acquire_pe(11).context(DeviceInit)?;
+        let counter_id = match x.get_pe_id("esa.cs.tu-darmstadt.de:hls:arrayinit:1.0") {
+            Ok(x) => x,
+            Err(_e) => 11,
+        };
+        let mut pe = x.acquire_pe(counter_id).context(DeviceInit)?;
 
         pe.start(vec![tapasco::device::PEParameter::DataTransferAlloc(
             tapasco::device::DataTransferAlloc {
@@ -142,11 +150,17 @@ fn run_counter(_: &ArgMatches) -> Result<()> {
     for mut x in devices {
         x.change_access(tapasco::tlkm::tlkm_access::TlkmAccessExclusive)
             .context(DeviceInit {})?;
+
+        let counter_id = match x.get_pe_id("esa.cs.tu-darmstadt.de:hls:counter:0.9") {
+            Ok(x) => x,
+            Err(_e) => 14,
+        };
+
         let mut pes = Vec::new();
-        pes.push(x.acquire_pe(14).context(DeviceInit)?);
-        pes.push(x.acquire_pe(14).context(DeviceInit)?);
-        pes.push(x.acquire_pe(14).context(DeviceInit)?);
-        pes.push(x.acquire_pe(14).context(DeviceInit)?);
+        pes.push(x.acquire_pe(counter_id).context(DeviceInit)?);
+        pes.push(x.acquire_pe(counter_id).context(DeviceInit)?);
+        pes.push(x.acquire_pe(counter_id).context(DeviceInit)?);
+        pes.push(x.acquire_pe(counter_id).context(DeviceInit)?);
         for _ in 0..10 {
             for pe in &mut pes.iter_mut() {
                 pe.start(vec![tapasco::device::PEParameter::Single64(1000)])
@@ -169,6 +183,12 @@ fn benchmark_counter(m: &ArgMatches) -> Result<()> {
     for mut x in devices.into_iter() {
         x.change_access(tapasco::tlkm::tlkm_access::TlkmAccessExclusive)
             .context(DeviceInit)?;
+
+        let counter_id = match x.get_pe_id("esa.cs.tu-darmstadt.de:hls:counter:0.9") {
+            Ok(x) => x,
+            Err(_e) => 14,
+        };
+
         let x_l = Arc::new(x);
         let iterations = value_t!(m, "iterations", usize).unwrap();
         let mut num_threads = value_t!(m, "threads", i32).unwrap();
@@ -180,6 +200,7 @@ fn benchmark_counter(m: &ArgMatches) -> Result<()> {
             "Starting {} thread benchmark with {} iterations and {} step.",
             num_threads, iterations, pb_step
         );
+
         for cur_threads in 1..num_threads + 1 {
             let iterations_per_threads = iterations / cur_threads as usize;
             let iterations_cur = iterations_per_threads * cur_threads as usize;
@@ -195,7 +216,8 @@ fn benchmark_counter(m: &ArgMatches) -> Result<()> {
                 for _t in 0..cur_threads {
                     s.spawn(|_| {
                         let x_local = x_l.clone();
-                        let mut pe = { x_local.acquire_pe(14).context(DeviceInit).unwrap() };
+                        let mut pe =
+                            { x_local.acquire_pe(counter_id).context(DeviceInit).unwrap() };
                         for i in 0..iterations_per_threads {
                             pe.start(vec![tapasco::device::PEParameter::Single64(1)])
                                 .context(JobError)
@@ -243,6 +265,12 @@ fn latency_benchmark(m: &ArgMatches) -> Result<()> {
         let mut iterations = value_t!(m, "iterations", usize).unwrap();
         let max_step = value_t!(m, "steps", u32).unwrap();
         println!("Starting benchmark.");
+
+        let counter_id = match x.get_pe_id("esa.cs.tu-darmstadt.de:hls:counter:0.9") {
+            Ok(x) => x,
+            Err(_e) => 14,
+        };
+
         for step_pow in 0..max_step {
             let step = u64::pow(2, step_pow);
             let step_duration_ns = (step as f32) * (1.0 / design_mhz);
@@ -259,7 +287,7 @@ fn latency_benchmark(m: &ArgMatches) -> Result<()> {
             io::stdout().flush().context(IOError)?;
 
             for _ in 0..iterations {
-                let mut pe = x.acquire_pe(14).context(DeviceInit)?;
+                let mut pe = x.acquire_pe(counter_id).context(DeviceInit)?;
                 let now = Instant::now();
                 pe.start(vec![tapasco::device::PEParameter::Single64(step)])
                     .context(JobError)?;
@@ -291,19 +319,21 @@ fn test_copy(_: &ArgMatches) -> Result<()> {
 
         let mem = x.default_memory().context(DeviceInit)?;
 
+        let mut small_rng = StdRng::from_entropy();
+
         for len_pow in 0..28 {
             let len = i32::pow(2, len_pow);
             println!("Checking {}", HumanBytes(len as u64));
             let a = mem
                 .allocator()
                 .lock()?
-                .allocate(256 * 4)
+                .allocate(len as u64)
                 .context(AllocatorError)?;
 
             let mut golden_samples: Vec<u8> = Vec::new();
             let mut result: Vec<u8> = Vec::new();
             for _ in 0..len {
-                golden_samples.push(rand::random());
+                golden_samples.push(small_rng.gen());
                 result.push(255);
             }
 
@@ -315,7 +345,12 @@ fn test_copy(_: &ArgMatches) -> Result<()> {
                 .zip(result.iter())
                 .filter(|&(a, b)| a != b)
                 .count();
-            println!("{} Bytes not matching", not_matching);
+
+            if not_matching != 0 {
+                println!("{} Bytes not matching", not_matching);
+            } else {
+                println!("All bytes matching.");
+            }
 
             if not_matching != 0 {
                 for (i, v) in golden_samples.iter().enumerate() {
@@ -328,6 +363,135 @@ fn test_copy(_: &ArgMatches) -> Result<()> {
             mem.allocator().lock()?.free(a).context(AllocatorError)?;
         }
     }
+    Ok(())
+}
+
+fn evaluate_copy(_m: &ArgMatches) -> Result<()> {
+    let buffer_size_min: f64 = 4.0 * 1024.0;
+    let buffer_size_max: f64 = 4.0 * 1024.0 * 1024.0;
+
+    let buffer_num_min = 1;
+    let buffer_num_max = 16;
+
+    let mut curr = buffer_size_min;
+    let pow2 = iter::repeat_with(|| {
+        let tmp = curr;
+        curr *= 2.0;
+        tmp as u64
+    })
+    .take((buffer_size_max.log2() - buffer_size_min.log2()) as usize + 1)
+    .cartesian_product(buffer_num_min..buffer_num_max);
+
+    let mut results = HashMap::new();
+
+    let mut best_results = HashMap::new();
+
+    let repetitions = 100;
+
+    let chunk_max = 26;
+
+    let mut data = vec![0; usize::pow(2, chunk_max as u32)];
+
+    for (size, num) in pow2 {
+        env::set_var("tapasco_dma__read_buffers", format!("{}", num));
+        env::set_var("tapasco_dma__write_buffers", format!("{}", num));
+        env::set_var("tapasco_dma__read_buffer_size", format!("{}", size));
+        env::set_var("tapasco_dma__write_buffer_size", format!("{}", size));
+        let tlkm = TLKM::new().context(TLKMInit {})?;
+        let devices = tlkm.device_enum(&HashMap::new()).context(TLKMInit)?;
+        let mem = devices[0].default_memory().context(DeviceInit)?;
+
+        println!("Testing {} x {}kB", num, size);
+
+        for chunk_pow in 10..(chunk_max + 1) {
+            let chunk = usize::pow(2, chunk_pow as u32);
+
+            println!("Chunk: {}", chunk);
+
+            let repetitions_used = if chunk * repetitions > (256 * 1024 * 1024) {
+                (256 * 1024 * 1024) / chunk
+            } else {
+                repetitions
+            };
+
+            let a = mem
+                .allocator()
+                .lock()?
+                .allocate(chunk as u64)
+                .context(AllocatorError)?;
+
+            let now = Instant::now();
+            for _ in 0..repetitions_used {
+                mem.dma().copy_to(&data[0..chunk], a).context(DMAError)?;
+            }
+            let done = now.elapsed().as_secs_f64();
+
+            let bps = (chunk as f64) / (done / (repetitions_used as f64));
+            results.insert((size, num, chunk, "r"), bps);
+            let config = (chunk, "r");
+            let r = (bps, size, num);
+            match best_results.get_mut(&config) {
+                Some(k) => {
+                    let (bps_old, _, _) = *k;
+                    if bps_old < bps {
+                        *k = r;
+                    }
+                }
+                None => {
+                    best_results.insert(config, r);
+                }
+            }
+
+            let now = Instant::now();
+            for _ in 0..repetitions_used {
+                mem.dma()
+                    .copy_from(a, &mut data[0..chunk])
+                    .context(DMAError)?;
+            }
+            let done = now.elapsed().as_secs_f64();
+
+            let bps = (chunk as f64) / (done / (repetitions_used as f64));
+            results.insert((size, num, chunk, "w"), bps);
+            let config = (chunk, "w");
+            let r = (bps, size, num);
+            match best_results.get_mut(&config) {
+                Some(k) => {
+                    let (bps_old, _, _) = *k;
+                    if bps_old < bps {
+                        *k = r;
+                    }
+                }
+                None => {
+                    best_results.insert(config, r);
+                }
+            }
+
+            mem.allocator().lock()?.free(a).context(AllocatorError)?;
+        }
+    }
+
+    println!("Best results:");
+    for ((chunk, dir), (bps, size, num)) in best_results {
+        let mbps = bps / (1024.0 * 1024.0);
+        if dir == "r" {
+            println!(
+                "{} kB Read: {} Mbps -> Num: {}, Size: {}",
+                chunk / 1024,
+                mbps,
+                num,
+                size
+            );
+        } else {
+            println!(
+                "{} kB Write: {} Mbps -> Num: {}, Size: {}",
+                chunk / 1024,
+                mbps,
+                num,
+                size
+            );
+        }
+    }
+
     Ok(())
 }
 
@@ -659,6 +823,10 @@ fn main() -> Result<()> {
             SubCommand::with_name("test_localmem")
                 .about("Tests running a job with local memory (uses ID 42)."),
         )
+        .subcommand(
+            SubCommand::with_name("evaluate_copy")
+                .about("Find optimal buffer settings for current host/device combination."),
+        )
         .get_matches();
 
     match match matches.subcommand() {
@@ -673,6 +841,7 @@ fn main() -> Result<()> {
         ("test_copy", Some(m)) => test_copy(m),
         ("benchmark_copy", Some(m)) => benchmark_copy(m),
         ("test_localmem", Some(m)) => test_localmem(m),
+        ("evaluate_copy", Some(m)) => evaluate_copy(m),
         _ => Err(Error::UnknownCommand {}),
     } {
         Ok(()) => Ok(()),

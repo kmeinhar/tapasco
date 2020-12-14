@@ -34,6 +34,7 @@
 #include "tlkm_device_ioctl.h"
 #include "tlkm_device_mmap.h"
 #include "user/tlkm_device_ioctl_cmds.h"
+#include "tlkm_bus.h"
 
 static const struct file_operations _tlkm_control_fops = {
 	.unlocked_ioctl = tlkm_device_ioctl,
@@ -60,17 +61,6 @@ static void exit_miscdev(struct tlkm_control *pctl)
 	DEVLOG(pctl->dev_id, TLKM_LF_CONTROL, "destroyed miscdevice");
 }
 
-ssize_t tlkm_control_signal_slot_interrupt(struct tlkm_control *pctl,
-					   const u32 s_id)
-{
-	if (pctl->user_interrupts[s_id] != 0) {
-		eventfd_signal(pctl->user_interrupts[s_id], 1);
-	} else {
-		DEVERR(pctl->dev_id, "No interrupt registered for PE %d", s_id);
-	}
-	return 0;
-}
-
 static struct tlkm_control *control_from_file(struct file *fp)
 {
 	struct miscdevice *m = (struct miscdevice *)fp->private_data;
@@ -78,25 +68,43 @@ static struct tlkm_control *control_from_file(struct file *fp)
 						   miscdev);
 }
 
+static struct tlkm_device *device_from_file(struct file *fp)
+{
+	struct miscdevice *m = (struct miscdevice *)fp->private_data;
+	struct tlkm_control *c = (struct tlkm_control *)container_of(
+		m, struct tlkm_control, miscdev);
+	return tlkm_bus_get_device(c->dev_id);
+}
+
 int tlkm_control_release(struct inode *inode, struct file *file)
 {
 	struct tlkm_control *c = control_from_file(file);
-	int i;
+	struct tlkm_device *dev = device_from_file(file);
+	struct list_head *ptr, *next;
+	struct tlkm_irq_mapping *entry;
 	DEVLOG(c->dev_id, TLKM_LF_CONTROL, "Releasing control device");
-	for (i = 0; i < PLATFORM_NUM_SLOTS; ++i) {
-		if (c->user_interrupts[i] != 0) {
-			eventfd_ctx_put(c->user_interrupts[i]);
-			c->user_interrupts[i] = 0;
-		}
+
+	list_for_each_safe (ptr, next, &c->interrupts) {
+		entry = list_entry(ptr, struct tlkm_irq_mapping, list);
+		eventfd_ctx_put(entry->eventfd);
+		entry->eventfd = 0;
+		dev->cls->rirq(dev, entry);
+		list_del(&entry->list);
+		kfree(entry);
 	}
+
+	if (dev->cls->miscdev_close) {
+		dev->cls->miscdev_close(dev);
+	}
+
 	return 0;
 }
 
 int tlkm_control_init(dev_id_t dev_id, struct tlkm_control **ppctl)
 {
-	int ret, i = 0;
-	struct tlkm_control *p =
-		(struct tlkm_control *)kzalloc(sizeof(*p), GFP_KERNEL);
+	int ret;
+	struct tlkm_control *p = (struct tlkm_control *)kzalloc(
+		sizeof(struct tlkm_control), GFP_KERNEL);
 	if (!p) {
 		DEVERR(dev_id, "could not allocate struct tlkm_control");
 		return -ENOMEM;
@@ -108,9 +116,7 @@ int tlkm_control_init(dev_id_t dev_id, struct tlkm_control **ppctl)
 		goto err_miscdev;
 	}
 
-	for (i = 0; i < PLATFORM_NUM_SLOTS; ++i) {
-		p->user_interrupts[i] = (struct eventfd_ctx *)0;
-	}
+	INIT_LIST_HEAD(&p->interrupts);
 
 	*ppctl = p;
 	DEVLOG(dev_id, TLKM_LF_CONTROL, "initialized control");
