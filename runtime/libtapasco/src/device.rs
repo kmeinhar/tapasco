@@ -565,6 +565,7 @@ impl Device {
                 name: "".to_string(),
                 offset: 0,
                 size: 0,
+                interrupts: [].to_vec(),
             })
             .offset;
         Ok(freq as i32)
